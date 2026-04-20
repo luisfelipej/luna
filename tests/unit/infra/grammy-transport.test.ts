@@ -135,6 +135,96 @@ describe("GrammyTelegramTransport", () => {
     expect(received).toEqual([]);
   });
 
+  it("truncates outbound text at the 4096 Telegram limit and appends a marker", async () => {
+    const bot = makeFakeBot();
+    const warns: Array<{ msg: string; meta?: object }> = [];
+    const logger = {
+      info() {},
+      warn(msg: string, meta?: object) {
+        warns.push(meta !== undefined ? { msg, meta } : { msg });
+      },
+      error() {},
+      child() {
+        return this;
+      },
+    };
+    const t = new GrammyTelegramTransport({
+      botFactory: () => bot as never,
+      allowList: [42],
+      logger,
+    });
+    const big = "a".repeat(5000);
+    const id = await t.sendMessage(42, big);
+    expect(id).toBe(1);
+    expect(bot.sent).toHaveLength(1);
+    const sent = bot.sent[0]!.text;
+    expect(sent.length).toBeLessThanOrEqual(4096);
+    expect(sent.endsWith("… (truncated)")).toBe(true);
+    expect(warns.length).toBeGreaterThan(0);
+    expect(warns[0]!.msg).toContain("truncat");
+  });
+
+  it("editMessage truncates identically and warns", async () => {
+    const bot = makeFakeBot();
+    const warns: string[] = [];
+    const logger = {
+      info() {},
+      warn(msg: string) {
+        warns.push(msg);
+      },
+      error() {},
+      child() {
+        return this;
+      },
+    };
+    const t = new GrammyTelegramTransport({
+      botFactory: () => bot as never,
+      allowList: [42],
+      logger,
+    });
+    const big = "z".repeat(4200);
+    await t.editMessage(42, 7, big);
+    expect(bot.edits[0]!.text.length).toBeLessThanOrEqual(4096);
+    expect(bot.edits[0]!.text.endsWith("… (truncated)")).toBe(true);
+    expect(warns.length).toBeGreaterThan(0);
+  });
+
+  it("MarkdownV2 parse error falls back to plain text on send and edit", async () => {
+    const bot = makeFakeBot();
+    let firstSend = true;
+    bot.api.sendMessage = async (chatId: number, text: string, other?: { parse_mode?: string }) => {
+      if (firstSend && other?.parse_mode === "MarkdownV2") {
+        firstSend = false;
+        const err = new Error("can't parse entities");
+        throw err;
+      }
+      bot.sent.push({ chatId, text });
+      return { message_id: bot.sent.length };
+    };
+    let firstEdit = true;
+    bot.api.editMessageText = async (
+      chatId: number,
+      messageId: number,
+      text: string,
+      other?: { parse_mode?: string },
+    ) => {
+      if (firstEdit && other?.parse_mode === "MarkdownV2") {
+        firstEdit = false;
+        throw new Error("Bad Request: can't parse entities");
+      }
+      bot.edits.push({ chatId, messageId, text });
+    };
+    const t = new GrammyTelegramTransport({
+      botFactory: () => bot as never,
+      allowList: [42],
+    });
+    const id = await t.sendMessage(42, "*bad*", { markdown: true });
+    expect(id).toBeGreaterThan(0);
+    expect(bot.sent).toHaveLength(1);
+    await t.editMessage(42, id, "*still*", { markdown: true });
+    expect(bot.edits).toHaveLength(1);
+  });
+
   it("start() calls deleteWebhook and bot.start; stop() stops", async () => {
     const bot = makeFakeBot();
     let deletedWebhook = false;
