@@ -1,25 +1,40 @@
 import { Bot } from "grammy";
 import type {
-  InboundHandler,
+  EditMessageOpts,
+  SendMessageOpts,
   TelegramTransport,
+  TelegramUpdateHandler,
 } from "../../adapters/ports/telegram-transport.port.ts";
 
-/**
- * Minimal structural type covering the grammY Bot API the tracer needs.
- * We accept the real `Bot` as well as an injected fake in tests.
- */
 /** Shape of the update passed to `on("message:text", ...)` handlers. */
 export interface GrammyMessageTextCtx {
   message: {
+    message_id: number;
     text: string;
     chat: { id: number };
     from: { id: number };
+    date: number;
   };
 }
 
+/**
+ * Structural type over the slice of the grammY Bot API Luna uses. Keeping
+ * this local lets tests inject a fake bot without instantiating grammY.
+ */
 export interface GrammyLikeBot {
   api: {
-    sendMessage(chatId: number, text: string): Promise<unknown>;
+    sendMessage(
+      chatId: number,
+      text: string,
+      other?: { parse_mode?: string },
+    ): Promise<{ message_id: number }>;
+    editMessageText(
+      chatId: number,
+      messageId: number,
+      text: string,
+      other?: { parse_mode?: string },
+    ): Promise<unknown>;
+    sendDocument(chatId: number, doc: unknown, other?: { caption?: string }): Promise<unknown>;
     deleteWebhook(opts: { drop_pending_updates: boolean }): Promise<unknown>;
   };
   on(event: "message:text", handler: (ctx: GrammyMessageTextCtx) => Promise<void> | void): void;
@@ -35,13 +50,13 @@ export interface GrammyTelegramTransportOptions {
 }
 
 /**
- * Phase-0 tracer transport: polls grammY, filters by allow-list,
- * and exposes the minimal `TelegramTransport` port surface.
+ * grammY-backed TelegramTransport. Filters inbound updates by allow-list;
+ * outbound calls return the new message_id so StreamEventThrottle can edit.
  */
 export class GrammyTelegramTransport implements TelegramTransport {
   private readonly bot: GrammyLikeBot;
   private readonly allowed: ReadonlySet<number>;
-  private handler: InboundHandler | null = null;
+  private handler: TelegramUpdateHandler | null = null;
 
   constructor(opts: GrammyTelegramTransportOptions) {
     this.bot = opts.botFactory();
@@ -53,16 +68,35 @@ export class GrammyTelegramTransport implements TelegramTransport {
       await this.handler({
         chatId: ctx.message.chat.id,
         fromId,
+        messageId: ctx.message.message_id,
         text: ctx.message.text,
+        dateMs: ctx.message.date * 1000,
       });
     });
   }
 
-  async sendMessage(chatId: number, text: string): Promise<void> {
-    await this.bot.api.sendMessage(chatId, text);
+  async sendMessage(chatId: number, text: string, opts?: SendMessageOpts): Promise<number> {
+    const other = opts?.markdown ? { parse_mode: "MarkdownV2" } : undefined;
+    const res = await this.bot.api.sendMessage(chatId, text, other);
+    return res.message_id;
   }
 
-  onMessage(handler: InboundHandler): void {
+  async editMessage(
+    chatId: number,
+    messageId: number,
+    text: string,
+    opts?: EditMessageOpts,
+  ): Promise<void> {
+    const other = opts?.markdown ? { parse_mode: "MarkdownV2" } : undefined;
+    await this.bot.api.editMessageText(chatId, messageId, text, other);
+  }
+
+  async sendFile(chatId: number, path: string, caption?: string): Promise<void> {
+    const other = caption !== undefined ? { caption } : undefined;
+    await this.bot.api.sendDocument(chatId, path, other);
+  }
+
+  onUpdate(handler: TelegramUpdateHandler): void {
     this.handler = handler;
   }
 

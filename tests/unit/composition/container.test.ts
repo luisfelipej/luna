@@ -2,7 +2,13 @@ import { describe, expect, it } from "bun:test";
 import { buildTracerContainer } from "../../../src/composition/container.ts";
 
 type TextUpdate = {
-  message: { text: string; chat: { id: number }; from: { id: number } };
+  message: {
+    message_id: number;
+    text: string;
+    chat: { id: number };
+    from: { id: number };
+    date: number;
+  };
 };
 
 function makeFakeBot() {
@@ -12,26 +18,27 @@ function makeFakeBot() {
     api: {
       async sendMessage(chatId: number, text: string) {
         sent.push({ chatId, text });
+        return { message_id: sent.length };
       },
-      async deleteWebhook() {
-        /* noop */
-      },
+      async editMessageText() {},
+      async sendDocument() {},
+      async deleteWebhook() {},
     },
     on(event: string, h: (ctx: TextUpdate) => Promise<void>) {
       if (event === "message:text") handler = h;
     },
-    async start() {
-      /* noop */
-    },
-    async stop() {
-      /* noop */
-    },
+    async start() {},
+    async stop() {},
     sent,
     async _deliver(u: TextUpdate) {
       if (!handler) throw new Error("no handler");
       await handler(u);
     },
   };
+}
+
+function makeUpdate(chatId: number, fromId: number, text: string): TextUpdate {
+  return { message: { message_id: 1, text, chat: { id: chatId }, from: { id: fromId }, date: 1 } };
 }
 
 describe("buildTracerContainer", () => {
@@ -46,12 +53,7 @@ describe("buildTracerContainer", () => {
     expect(typeof container.stop).toBe("function");
 
     await container.start();
-
-    await bot._deliver({
-      message: { text: "hi", chat: { id: 42 }, from: { id: 42 } },
-    });
-
-    // give async handler a tick to resolve
+    await bot._deliver(makeUpdate(42, 42, "hi"));
     await Promise.resolve();
 
     expect(bot.sent).toEqual([{ chatId: 42, text: "echo: hi" }]);
@@ -75,18 +77,17 @@ describe("buildTracerContainer", () => {
       botFactory: () => bot as never,
     });
     await container.start();
+
     // id 999 not in the list → dropped
-    await bot._deliver({
-      message: { text: "x", chat: { id: 1 }, from: { id: 999 } },
-    });
+    await bot._deliver(makeUpdate(1, 999, "x"));
     await Promise.resolve();
     expect(bot.sent).toEqual([]);
+
     // id 2 allowed
-    await bot._deliver({
-      message: { text: "y", chat: { id: 2 }, from: { id: 2 } },
-    });
+    await bot._deliver(makeUpdate(2, 2, "y"));
     await Promise.resolve();
     expect(bot.sent).toEqual([{ chatId: 2, text: "echo: y" }]);
+
     await container.stop();
   });
 });

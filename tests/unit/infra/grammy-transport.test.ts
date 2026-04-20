@@ -2,21 +2,21 @@ import { describe, expect, it } from "bun:test";
 import type { TelegramTransport } from "../../../src/adapters/ports/telegram-transport.port.ts";
 import { GrammyTelegramTransport } from "../../../src/infra/telegram/grammy-transport.ts";
 
-/**
- * A fake grammY-like Bot that captures outgoing sendMessage calls and
- * lets tests synthesize inbound `message:text` updates.
- */
 type TextUpdate = {
   message: {
+    message_id: number;
     text: string;
     chat: { id: number };
     from: { id: number };
+    date: number;
   };
 };
-type TextHandler = (ctx: { match?: unknown } & TextUpdate) => Promise<void> | void;
+type TextHandler = (ctx: TextUpdate) => Promise<void> | void;
 
 function makeFakeBot() {
   const sent: Array<{ chatId: number; text: string }> = [];
+  const edits: Array<{ chatId: number; messageId: number; text: string }> = [];
+  const files: Array<{ chatId: number; path: string; caption?: string }> = [];
   let textHandler: TextHandler | null = null;
   let started = false;
   const bot = {
@@ -25,9 +25,18 @@ function makeFakeBot() {
         sent.push({ chatId, text });
         return { message_id: sent.length };
       },
-      async deleteWebhook(_opts: { drop_pending_updates: boolean }) {
-        /* noop */
+      async editMessageText(chatId: number, messageId: number, text: string) {
+        edits.push({ chatId, messageId, text });
       },
+      async sendDocument(chatId: number, path: unknown, other?: { caption?: string }) {
+        const entry: { chatId: number; path: string; caption?: string } = {
+          chatId,
+          path: String(path),
+        };
+        if (other?.caption !== undefined) entry.caption = other.caption;
+        files.push(entry);
+      },
+      async deleteWebhook(_opts: { drop_pending_updates: boolean }) {},
     },
     on(event: string, handler: TextHandler) {
       if (event === "message:text") textHandler = handler;
@@ -38,7 +47,6 @@ function makeFakeBot() {
     async stop() {
       started = false;
     },
-    // helper for tests to inject a synthetic update
     async _deliver(update: TextUpdate) {
       if (!textHandler) throw new Error("no handler registered");
       await textHandler({ ...update });
@@ -47,33 +55,46 @@ function makeFakeBot() {
       return started;
     },
     sent,
+    edits,
+    files,
   };
   return bot;
 }
 
 describe("GrammyTelegramTransport", () => {
-  it("structurally satisfies the TelegramTransport port", () => {
+  it("structurally satisfies the streaming TelegramTransport port", () => {
     const bot = makeFakeBot();
     const t: TelegramTransport = new GrammyTelegramTransport({
       botFactory: () => bot as never,
       allowList: [42],
     });
     expect(typeof t.sendMessage).toBe("function");
-    expect(typeof t.onMessage).toBe("function");
-    expect(typeof t.start).toBe("function");
-    expect(typeof t.stop).toBe("function");
+    expect(typeof t.editMessage).toBe("function");
+    expect(typeof t.sendFile).toBe("function");
+    expect(typeof t.onUpdate).toBe("function");
   });
 
-  it("forwards sendMessage through the grammY bot.api", async () => {
+  it("sendMessage returns the telegram message_id", async () => {
     const bot = makeFakeBot();
     const t = new GrammyTelegramTransport({
       botFactory: () => bot as never,
       allowList: [42],
     });
-
-    await t.sendMessage(42, "hello");
-
+    const id = await t.sendMessage(42, "hello");
+    expect(id).toBe(1);
     expect(bot.sent).toEqual([{ chatId: 42, text: "hello" }]);
+  });
+
+  it("editMessage and sendFile forward through the bot api", async () => {
+    const bot = makeFakeBot();
+    const t = new GrammyTelegramTransport({
+      botFactory: () => bot as never,
+      allowList: [42],
+    });
+    await t.editMessage(42, 7, "edited");
+    await t.sendFile(42, "/tmp/x.txt", "here you go");
+    expect(bot.edits).toEqual([{ chatId: 42, messageId: 7, text: "edited" }]);
+    expect(bot.files).toEqual([{ chatId: 42, path: "/tmp/x.txt", caption: "here you go" }]);
   });
 
   it("invokes the registered handler for allow-listed senders", async () => {
@@ -82,14 +103,14 @@ describe("GrammyTelegramTransport", () => {
       botFactory: () => bot as never,
       allowList: [42],
     });
-    const received: Array<{ chatId: number; fromId: number; text: string }> = [];
-    t.onMessage(async (m) => {
-      received.push(m);
+    const received: Array<{ chatId: number; fromId: number; text: string | undefined }> = [];
+    t.onUpdate(async (m) => {
+      received.push({ chatId: m.chatId, fromId: m.fromId, text: m.text });
     });
     await t.start();
 
     await bot._deliver({
-      message: { text: "hi", chat: { id: 42 }, from: { id: 42 } },
+      message: { message_id: 1, text: "hi", chat: { id: 42 }, from: { id: 42 }, date: 1 },
     });
 
     expect(received).toEqual([{ chatId: 42, fromId: 42, text: "hi" }]);
@@ -102,13 +123,13 @@ describe("GrammyTelegramTransport", () => {
       allowList: [42],
     });
     const received: Array<unknown> = [];
-    t.onMessage(async (m) => {
+    t.onUpdate(async (m) => {
       received.push(m);
     });
     await t.start();
 
     await bot._deliver({
-      message: { text: "hi", chat: { id: 42 }, from: { id: 999 } },
+      message: { message_id: 1, text: "hi", chat: { id: 42 }, from: { id: 999 }, date: 1 },
     });
 
     expect(received).toEqual([]);

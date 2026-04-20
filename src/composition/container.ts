@@ -31,9 +31,19 @@ export function buildTracerContainer(opts: BuildTracerContainerOptions): TracerC
     allowList: env.TELEGRAM_ALLOWED_IDS,
   });
   const backend = new EchoBackend();
-  const sendMessageToAgent = makeSendMessageToAgent({ backend, telegram: transport });
+  const sendMessageToAgent = makeSendMessageToAgent({
+    backend,
+    telegram: transport,
+    defaultConfig: {
+      model: "sonnet",
+      timeoutS: 300,
+      budgetUsd: 0,
+      contextWindow: 200_000,
+    },
+  });
 
-  transport.onMessage(async ({ chatId, text }) => {
+  transport.onUpdate(async ({ chatId, text }) => {
+    if (text === undefined) return;
     await sendMessageToAgent(chatId, text);
   });
 

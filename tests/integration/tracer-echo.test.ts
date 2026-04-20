@@ -7,7 +7,13 @@ import { buildTracerContainer } from "../../src/composition/container.ts";
  * wired composition root — no real bot token, no network.
  */
 type TextUpdate = {
-  message: { text: string; chat: { id: number }; from: { id: number } };
+  message: {
+    message_id: number;
+    text: string;
+    chat: { id: number };
+    from: { id: number };
+    date: number;
+  };
 };
 
 function makeFakeBot() {
@@ -17,20 +23,17 @@ function makeFakeBot() {
     api: {
       async sendMessage(chatId: number, text: string) {
         sent.push({ chatId, text });
+        return { message_id: sent.length };
       },
-      async deleteWebhook() {
-        /* noop */
-      },
+      async editMessageText() {},
+      async sendDocument() {},
+      async deleteWebhook() {},
     },
     on(event: string, h: (ctx: TextUpdate) => Promise<void>) {
       if (event === "message:text") handler = h;
     },
-    async start() {
-      /* noop */
-    },
-    async stop() {
-      /* noop */
-    },
+    async start() {},
+    async stop() {},
     sent,
     async _deliver(u: TextUpdate) {
       if (!handler) throw new Error("no handler");
@@ -49,7 +52,7 @@ describe("tracer echo (component-level, fake transport)", () => {
 
     await container.start();
     await bot._deliver({
-      message: { text: "hola", chat: { id: 42 }, from: { id: 42 } },
+      message: { message_id: 1, text: "hola", chat: { id: 42 }, from: { id: 42 }, date: 1 },
     });
     // let the async handler chain settle
     await Promise.resolve();
