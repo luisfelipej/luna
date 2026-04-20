@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type {
-  WebhookEvent,
-  WebhookEventKind,
-} from "../../../src/entities/webhook-event.ts";
+import type { WebhookEvent, WebhookEventKind } from "../../../src/entities/webhook-event.ts";
 
 describe("WebhookEvent ADT", () => {
   it("exhaustive switch covers every kind", () => {
