@@ -1,0 +1,9 @@
+workspaces:
+  - path: /home/you/code/example
+    system_prompt: |
+      You are an assistant working inside the example workspace.
+    claude:
+      model: sonnet
+      timeout_s: 300
+      budget_usd: 2
+      context_window: 100000

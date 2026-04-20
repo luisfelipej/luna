@@ -1,0 +1,11 @@
+services:
+  - name: weather
+    url: https://api.open-meteo.com/v1/forecast
+    method: GET
+    description: Open-Meteo forecast endpoint.
+    auth:
+      mode: none
+    params:
+      current: temperature_2m
+    allow_path_suffix: false
+    allow_internal: false
