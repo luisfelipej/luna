@@ -26,6 +26,14 @@ import { makeScheduleJob } from "../usecases/http/schedule-job.ts";
 import { makeSendProactiveMessage } from "../usecases/http/send-proactive-message.ts";
 import { makeRunScheduledFire } from "../usecases/scheduler/run-scheduled-fire.ts";
 import { makeCancelJob } from "../usecases/scheduler/cancel-job.ts";
+import { makeWorkspaceResolver } from "../usecases/workspace/workspace-resolver.ts";
+import { makeSwitchWorkspace } from "../usecases/workspace/switch-workspace.ts";
+import { makeCreateWorkspace } from "../usecases/workspace/create-workspace.ts";
+import { makeAddAllowedWorkspace } from "../usecases/workspace/add-allowed-workspace.ts";
+import { makeRemoveAllowedWorkspace } from "../usecases/workspace/remove-allowed-workspace.ts";
+import { makeListAllowedWorkspaces } from "../usecases/workspace/list-allowed-workspaces.ts";
+import { NodeFsPort } from "../infra/fs/node-fs-port.ts";
+import { spawn as childSpawn } from "node:child_process";
 import { LoopScheduler } from "./scheduler/loop-scheduler.ts";
 import { buildClaudeAgentBackend } from "./claude-backend-container.ts";
 import { buildStoresContainer, storesOptionsFromEnv } from "./container.ts";
@@ -179,6 +187,48 @@ export async function buildFullAppContainer(
     },
   });
   const cancelJob = makeCancelJob({ jobStore: stores.jobStore, scheduler });
+
+  // ── Workspace commands (Phase 10) ───────────────────────────────────
+  const workspaceBase = env.WORKSPACE_BASE ?? dataDir;
+  const fsPort = new NodeFsPort();
+  const workspaceResolver = makeWorkspaceResolver({
+    fs: fsPort,
+    allowedWorkspaceStore: stores.allowedWorkspaceStore,
+    workspaceBase,
+  });
+  const switchWorkspace = makeSwitchWorkspace({
+    resolver: workspaceResolver,
+    allowedWorkspaceStore: stores.allowedWorkspaceStore,
+    workspaceHistoryStore: stores.workspaceHistoryStore,
+    backend: claude.backend,
+    refreshSnapshot: refresh,
+    now: () => new Date(clock.nowMs()),
+  });
+  const addAllowedWorkspace = makeAddAllowedWorkspace({
+    fs: fsPort,
+    allowedWorkspaceStore: stores.allowedWorkspaceStore,
+    workspaceBase,
+    now: () => new Date(clock.nowMs()),
+  });
+  const removeAllowedWorkspace = makeRemoveAllowedWorkspace({
+    fs: fsPort,
+    allowedWorkspaceStore: stores.allowedWorkspaceStore,
+    workspaceBase,
+  });
+  const listAllowedWorkspaces = makeListAllowedWorkspaces({
+    allowedWorkspaceStore: stores.allowedWorkspaceStore,
+    workspaceHistoryStore: stores.workspaceHistoryStore,
+  });
+  const createWorkspace = makeCreateWorkspace({
+    fs: fsPort,
+    allowedWorkspaceStore: stores.allowedWorkspaceStore,
+    workspaceHistoryStore: stores.workspaceHistoryStore,
+    backend: claude.backend,
+    workspaceBase,
+    refreshSnapshot: refresh,
+    execCommand: defaultExecCommand,
+    now: () => new Date(clock.nowMs()),
+  });
   const updateSettings = makeUpdateUserSettings({
     settings: stores.settingsStore,
     refreshSnapshot: refresh,
@@ -197,6 +247,9 @@ export async function buildFullAppContainer(
     scheduleJob: makeScheduleJob({ jobStore: stores.jobStore, scheduler }),
     jobStore: stores.jobStore,
     ...(serviceProxy ? { serviceProxy } : {}),
+    fsPort,
+    workspaceBase,
+    allowedWorkspaceStore: stores.allowedWorkspaceStore,
   });
 
   const defaultWebhookStatus: WebhookStatusProvider = {
@@ -229,6 +282,11 @@ export async function buildFullAppContainer(
     webhookStatus,
     jobStore: stores.jobStore,
     cancelJob,
+    switchWorkspace,
+    createWorkspace,
+    addAllowedWorkspace,
+    removeAllowedWorkspace,
+    listAllowedWorkspaces,
   });
   presenter.register();
 
@@ -296,6 +354,25 @@ function buildServiceProxy(
     return undefined;
   }
   return new UndiciServiceProxy({ repo, env });
+}
+
+/**
+ * Default `execCommand` for CreateWorkspace — runs a child process, waits for
+ * clean exit, throws on non-zero. Kept local so the usecase stays pure.
+ */
+async function defaultExecCommand(
+  command: string,
+  args: readonly string[],
+  cwd: string,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = childSpawn(command, [...args], { cwd, stdio: "ignore" });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with code ${code}`));
+    });
+  });
 }
 
 function parseAllowList(raw: string): number[] {

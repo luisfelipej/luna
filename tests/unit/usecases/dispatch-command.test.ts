@@ -65,23 +65,30 @@ describe("dispatchCommand", () => {
     expect(dispatchCommand(p("/webhooks"))).toEqual({ kind: "showWebhooks" });
   });
 
-  it("/workspace* → stubbed (Phase 10)", () => {
-    for (const cmd of [
-      "/workspace",
-      "/ws",
-      "/workspaces",
-      "/workspace-new foo",
-      "/workspace-home",
-      "/workspace-allow /x",
-      "/workspace-deny /x",
-      "/workspace-allowed",
-    ]) {
-      const r = dispatchCommand(p(cmd));
-      expect(r.kind).toBe("notImplemented");
-      if (r.kind === "notImplemented") {
-        expect(r.area).toBe("workspace");
-      }
-    }
+  it("/workspace* → Phase 10 effects", () => {
+    expect(dispatchCommand(p("/workspace"))).toEqual({ kind: "showWorkspace" });
+    expect(dispatchCommand(p("/ws"))).toEqual({ kind: "showWorkspace" });
+    expect(dispatchCommand(p("/workspace proj"))).toEqual({
+      kind: "switchWorkspace",
+      ref: "proj",
+    });
+    expect(dispatchCommand(p("/workspaces"))).toEqual({ kind: "listWorkspaces" });
+    expect(dispatchCommand(p("/workspace-allowed"))).toEqual({ kind: "listWorkspaces" });
+    expect(dispatchCommand(p("/workspace-new foo"))).toEqual({
+      kind: "createWorkspace",
+      name: "foo",
+    });
+    expect(dispatchCommand(p("/workspace-allow /x"))).toEqual({
+      kind: "allowWorkspace",
+      ref: "/x",
+    });
+    expect(dispatchCommand(p("/workspace-deny /x"))).toEqual({
+      kind: "denyWorkspace",
+      ref: "/x",
+    });
+    // /workspace-home stays stubbed (no usecase in M1).
+    const home = dispatchCommand(p("/workspace-home"));
+    expect(home.kind).toBe("notImplemented");
   });
 
   it("/jobs lists jobs for the chat", () => {

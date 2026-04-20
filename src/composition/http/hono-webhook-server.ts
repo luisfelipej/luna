@@ -6,7 +6,10 @@ import type {
   WebhookServerStatus,
   WebhookEndpointStatus,
 } from "../../adapters/ports/webhook-server.port.ts";
+import type { FsPort } from "../../adapters/ports/fs.port.ts";
+import type { AllowedWorkspaceStore } from "../../adapters/ports/allowed-workspace-store.port.ts";
 import type { Schedule } from "../../entities/job.ts";
+import { assertConfined } from "../../usecases/workspace/assert-confined.ts";
 import { verifyGithubSignature, constantTimeEqual } from "../../usecases/http/hmac-verifier.ts";
 import { parseGithubWebhook } from "../../usecases/http/parse-github-webhook.ts";
 import type { RouteWebhookEvent } from "../../usecases/http/route-webhook-event.ts";
@@ -29,6 +32,15 @@ export interface HonoWebhookServerOptions {
   readonly jobStore: JobStore;
   /** Optional service proxy. Phase 9 supplies the real UndiciServiceProxy. */
   readonly serviceProxy?: ServiceProxyPort;
+  /**
+   * Phase 10: confine `/api/send-file` path uploads. When provided, the route
+   * calls `assertConfined(path, workspaceBase)` AND requires the realpath to
+   * be in `allowedWorkspaceStore` for the supplied chat_id. When absent, the
+   * route falls back to the Phase-7 textual stub so legacy tests still pass.
+   */
+  readonly fsPort?: FsPort;
+  readonly workspaceBase?: string;
+  readonly allowedWorkspaceStore?: AllowedWorkspaceStore;
 }
 
 interface EndpointStat {
@@ -277,8 +289,36 @@ export class HonoWebhookServer implements WebhookServerPort {
         if (parsed.value.caption !== undefined) caption = parsed.value.caption;
       }
       if (!Number.isFinite(chatId)) return c.text("Invalid chat_id", 400);
-      // Basic path confinement (Phase 10 replaces with realpath+FsPort check).
-      if (filePath.includes("..") || !filePath.startsWith("/")) {
+      // Phase 10: realpath-based confinement + allow-list check when wired.
+      if (o.fsPort && o.workspaceBase && o.allowedWorkspaceStore) {
+        try {
+          const canonical = await assertConfined({
+            fs: o.fsPort,
+            target: filePath,
+            base: o.workspaceBase,
+          });
+          // Must also live in at least one chat's allow-list — the admin
+          // chat. In M1 we gate on the caller's chat_id.
+          const allowed = await o.allowedWorkspaceStore.has(chatId, canonical);
+          // Accept if either the exact path is in the allow-list OR if any
+          // parent is (files inside an allowed workspace dir are ok).
+          if (!allowed) {
+            let ok = false;
+            const rows = await o.allowedWorkspaceStore.list(chatId);
+            for (const r of rows) {
+              if (canonical === r.path || canonical.startsWith(`${r.path}/`)) {
+                ok = true;
+                break;
+              }
+            }
+            if (!ok) return c.text("Path not allowed", 403);
+          }
+          filePath = canonical;
+        } catch {
+          return c.text("Path not allowed", 403);
+        }
+      } else if (filePath.includes("..") || !filePath.startsWith("/")) {
+        // Fallback textual stub for tests that don't wire the fs surface.
         return c.text("Path not allowed", 403);
       }
       try {

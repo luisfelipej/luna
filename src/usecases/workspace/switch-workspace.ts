@@ -38,9 +38,7 @@ export function makeSwitchWorkspace(deps: SwitchWorkspaceDeps) {
     const path = await deps.resolver.resolve(chatId, ref);
     const allowed = await deps.allowedWorkspaceStore.has(chatId, path);
     if (!allowed) {
-      throw new PathConfinementError(
-        `workspace not allowed. Use /workspace-allow first: ${ref}`,
-      );
+      throw new PathConfinementError(`workspace not allowed. Use /workspace-allow first: ${ref}`);
     }
     const now = deps.now();
     await deps.workspaceHistoryStore.setCurrent(chatId, path);

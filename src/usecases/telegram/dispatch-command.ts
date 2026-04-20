@@ -20,6 +20,12 @@ export type CommandEffect =
   | { readonly kind: "listJobs" }
   | { readonly kind: "showJob"; readonly jobId: number }
   | { readonly kind: "cancelJob"; readonly jobId: number }
+  | { readonly kind: "listWorkspaces" }
+  | { readonly kind: "showWorkspace" }
+  | { readonly kind: "switchWorkspace"; readonly ref: string }
+  | { readonly kind: "createWorkspace"; readonly name: string }
+  | { readonly kind: "allowWorkspace"; readonly ref: string }
+  | { readonly kind: "denyWorkspace"; readonly ref: string }
   | { readonly kind: "notImplemented"; readonly area: "workspace" | "jobs" }
   | { readonly kind: "unknownCommand"; readonly command: string }
   | { readonly kind: "replyError"; readonly message: string };
@@ -125,6 +131,39 @@ export function dispatchCommand(cmd: ParsedCommand): CommandEffect {
       // M1 exposes only /jobs, /job <id>, /job cancel <id>; keep /jobs-info as
       // a stub so the command surface stays recognised but unimplemented.
       return { kind: "notImplemented", area: "jobs" };
+    case "workspaces":
+      return { kind: "listWorkspaces" };
+    case "workspace":
+    case "ws": {
+      const [first] = args;
+      if (first === undefined) return { kind: "showWorkspace" };
+      return { kind: "switchWorkspace", ref: first };
+    }
+    case "workspace-new": {
+      const [first] = args;
+      if (first === undefined) {
+        return { kind: "replyError", message: "Usage: /workspace-new <name>" };
+      }
+      return { kind: "createWorkspace", name: first };
+    }
+    case "workspace-allow": {
+      const [first] = args;
+      if (first === undefined) {
+        return { kind: "replyError", message: "Usage: /workspace-allow <path>" };
+      }
+      return { kind: "allowWorkspace", ref: first };
+    }
+    case "workspace-deny": {
+      const [first] = args;
+      if (first === undefined) {
+        return { kind: "replyError", message: "Usage: /workspace-deny <path>" };
+      }
+      return { kind: "denyWorkspace", ref: first };
+    }
+    case "workspace-allowed":
+      return { kind: "listWorkspaces" };
+    case "workspace-home":
+      return { kind: "notImplemented", area: "workspace" };
     default:
       if (WORKSPACE_CMDS.has(command)) return { kind: "notImplemented", area: "workspace" };
       if (JOB_CMDS.has(command)) return { kind: "notImplemented", area: "jobs" };

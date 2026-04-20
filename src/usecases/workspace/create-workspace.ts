@@ -6,11 +6,7 @@ import type { WorkspaceHistoryStore } from "../../adapters/ports/workspace-histo
 import { ConfigError } from "../../entities/errors.ts";
 import { assertConfined } from "./assert-confined.ts";
 
-export type ExecCommand = (
-  command: string,
-  args: readonly string[],
-  cwd: string,
-) => Promise<void>;
+export type ExecCommand = (command: string, args: readonly string[], cwd: string) => Promise<void>;
 
 export interface CreateWorkspaceDeps {
   readonly fs: FsPort;

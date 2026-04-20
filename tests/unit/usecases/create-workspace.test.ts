@@ -12,7 +12,7 @@ describe("CreateWorkspace", () => {
     const hist = new FakeWorkspaceHistoryStore();
     const backend = new FakeAgentBackend();
     const refresh = mock(async () => {});
-    const execCommand = mock(async (_cmd: string, _args: string[], _cwd: string) => {});
+    const execCommand = mock(async (_cmd: string, _args: readonly string[], _cwd: string) => {});
 
     const create = makeCreateWorkspace({
       fs,
@@ -32,9 +32,7 @@ describe("CreateWorkspace", () => {
     expect(execCommand.mock.calls[0]).toEqual(["git", ["init"], "/home/u/ws/newp"]);
     expect(await allow.has(42, "/home/u/ws/newp")).toBe(true);
     expect(await hist.getCurrent(42)).toBe("/home/u/ws/newp");
-    expect(backend.changeWorkspaceCalls).toEqual([
-      { chatId: 42, newCwd: "/home/u/ws/newp" },
-    ]);
+    expect(backend.changeWorkspaceCalls).toEqual([{ chatId: 42, newCwd: "/home/u/ws/newp" }]);
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 

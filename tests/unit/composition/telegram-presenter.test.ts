@@ -199,8 +199,9 @@ describe("TelegramPresenter", () => {
     });
     presenter.register();
 
+    // Phase 10: bare `/workspace` now shows the current workspace path.
     await transport.deliver(update(42, "/workspace"));
-    expect(transport.sent.at(-1)?.text.toLowerCase()).toContain("not yet implemented");
+    expect(transport.sent.at(-1)?.text.toLowerCase()).toContain("current workspace");
 
     await transport.deliver(update(42, "/jobs-info"));
     expect(transport.sent.at(-1)?.text.toLowerCase()).toContain("not yet implemented");

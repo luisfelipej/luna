@@ -49,6 +49,15 @@ export interface TelegramPresenterDeps {
    */
   readonly jobStore?: JobStore;
   readonly cancelJob?: (jobId: number) => Promise<boolean>;
+  /** Phase 10: workspace command surface. All optional for legacy tests. */
+  readonly switchWorkspace?: (chatId: number, ref: string) => Promise<{ path: string }>;
+  readonly createWorkspace?: (chatId: number, name: string) => Promise<{ path: string }>;
+  readonly addAllowedWorkspace?: (chatId: number, ref: string) => Promise<{ path: string }>;
+  readonly removeAllowedWorkspace?: (chatId: number, ref: string) => Promise<void>;
+  readonly listAllowedWorkspaces?: (chatId: number) => Promise<{
+    rows: ReadonlyArray<{ path: string }>;
+    currentPath: string | null;
+  }>;
 }
 
 /**
@@ -152,6 +161,26 @@ export class TelegramPresenter {
       case "cancelJob":
         await this.handleCancelJob(chatId, effect.jobId);
         return;
+      case "listWorkspaces":
+        await this.handleListWorkspaces(chatId);
+        return;
+      case "showWorkspace": {
+        const ws = await this.deps.workspacePath(chatId);
+        await transport.sendMessage(chatId, `Current workspace: ${ws}`);
+        return;
+      }
+      case "switchWorkspace":
+        await this.handleSwitchWorkspace(chatId, effect.ref);
+        return;
+      case "createWorkspace":
+        await this.handleCreateWorkspace(chatId, effect.name);
+        return;
+      case "allowWorkspace":
+        await this.handleAddAllow(chatId, effect.ref);
+        return;
+      case "denyWorkspace":
+        await this.handleRemoveAllow(chatId, effect.ref);
+        return;
       case "notImplemented":
         await transport.sendMessage(
           chatId,
@@ -227,6 +256,81 @@ export class TelegramPresenter {
     }
     const removed = await cancelJob(jobId);
     await transport.sendMessage(chatId, removed ? `Job ${jobId} cancelled.` : "Nothing to cancel.");
+  }
+
+  private async handleListWorkspaces(chatId: number): Promise<void> {
+    const { transport, listAllowedWorkspaces } = this.deps;
+    if (!listAllowedWorkspaces) {
+      await transport.sendMessage(chatId, "Workspace commands not wired.");
+      return;
+    }
+    const { rows, currentPath } = await listAllowedWorkspaces(chatId);
+    if (rows.length === 0) {
+      await transport.sendMessage(chatId, "No allowed workspaces.");
+      return;
+    }
+    const lines = ["Allowed workspaces:"];
+    for (const r of rows) {
+      const marker = r.path === currentPath ? "• " : "  ";
+      lines.push(`${marker}${r.path}`);
+    }
+    await transport.sendMessage(chatId, lines.join("\n"));
+  }
+
+  private async handleSwitchWorkspace(chatId: number, ref: string): Promise<void> {
+    const { transport, switchWorkspace } = this.deps;
+    if (!switchWorkspace) {
+      await transport.sendMessage(chatId, "Workspace commands not wired.");
+      return;
+    }
+    try {
+      const { path } = await switchWorkspace(chatId, ref);
+      await transport.sendMessage(chatId, `Switched to ${path}.`);
+    } catch (err) {
+      await transport.sendMessage(chatId, renderError(err));
+    }
+  }
+
+  private async handleCreateWorkspace(chatId: number, name: string): Promise<void> {
+    const { transport, createWorkspace } = this.deps;
+    if (!createWorkspace) {
+      await transport.sendMessage(chatId, "Workspace commands not wired.");
+      return;
+    }
+    try {
+      const { path } = await createWorkspace(chatId, name);
+      await transport.sendMessage(chatId, `Created and switched to ${path}.`);
+    } catch (err) {
+      await transport.sendMessage(chatId, renderError(err));
+    }
+  }
+
+  private async handleAddAllow(chatId: number, ref: string): Promise<void> {
+    const { transport, addAllowedWorkspace } = this.deps;
+    if (!addAllowedWorkspace) {
+      await transport.sendMessage(chatId, "Workspace commands not wired.");
+      return;
+    }
+    try {
+      const { path } = await addAllowedWorkspace(chatId, ref);
+      await transport.sendMessage(chatId, `Added ${path} to allow-list.`);
+    } catch (err) {
+      await transport.sendMessage(chatId, renderError(err));
+    }
+  }
+
+  private async handleRemoveAllow(chatId: number, ref: string): Promise<void> {
+    const { transport, removeAllowedWorkspace } = this.deps;
+    if (!removeAllowedWorkspace) {
+      await transport.sendMessage(chatId, "Workspace commands not wired.");
+      return;
+    }
+    try {
+      await removeAllowedWorkspace(chatId, ref);
+      await transport.sendMessage(chatId, `Removed ${ref} from allow-list.`);
+    } catch (err) {
+      await transport.sendMessage(chatId, renderError(err));
+    }
   }
 
   private async handleFreeText(chatId: number, text: string): Promise<void> {

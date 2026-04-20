@@ -18,7 +18,9 @@ export interface ListAllowedWorkspacesResult {
  * the Telegram presenter.
  */
 export function makeListAllowedWorkspaces(deps: ListAllowedWorkspacesDeps) {
-  return async function listAllowedWorkspaces(chatId: number): Promise<ListAllowedWorkspacesResult> {
+  return async function listAllowedWorkspaces(
+    chatId: number,
+  ): Promise<ListAllowedWorkspacesResult> {
     const rows = await deps.allowedWorkspaceStore.list(chatId);
     const currentPath = await deps.workspaceHistoryStore.getCurrent(chatId);
     return { rows, currentPath };

@@ -40,9 +40,7 @@ export function makeWorkspaceResolver(deps: WorkspaceResolverDeps): WorkspaceRes
         // Outside base: require allow-listed entry.
         const listed = await allowedWorkspaceStore.has(chatId, canonical);
         if (!listed) {
-          throw new PathConfinementError(
-            `absolute path not in allowed_workspaces: ${ref}`,
-          );
+          throw new PathConfinementError(`absolute path not in allowed_workspaces: ${ref}`);
         }
         return canonical;
       }
