@@ -164,8 +164,12 @@ describe("port interfaces compile and fakes are structurally assignable", () => 
     const s: WebhookServerPort = {
       async start() {},
       async stop() {},
+      status() {
+        return { running: false, port: null, endpoints: [] };
+      },
     };
     expect(typeof s.start).toBe("function");
+    expect(s.status().running).toBe(false);
   });
 
   it("ServiceProxyPort", () => {
