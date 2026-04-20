@@ -70,6 +70,12 @@ export interface BuildFullAppContainerOptions {
   readonly transportOverride?: TelegramTransport;
   /** Test override: supply a FakeSpawn.spawn instead of node spawn. */
   readonly spawnOverride?: SpawnPort;
+  /**
+   * Test override: supply a FakeAgentBackend (implements AgentBackendPort)
+   * instead of the pooled ClaudeCodeBackend. Bypasses the real pool to avoid
+   * re-entrant per-chat locks under `bun:test`.
+   */
+  readonly agentBackendOverride?: import("../adapters/ports/agent-backend.port.ts").AgentBackendPort;
   /** Explicit YAML path (null = skip, use empty repos). */
   readonly usersYamlPath?: string | null;
   readonly workspacesYamlPath?: string | null;
@@ -140,6 +146,10 @@ export async function buildFullAppContainer(
     dataDir,
     ...(opts.spawnOverride ? { spawn: opts.spawnOverride } : {}),
   });
+  // When a test passes a stub AgentBackend, the pooled backend is bypassed.
+  // The pool + crashRecovery + abort registry still exist (needed by
+  // presenter + SendMessageToAgent) but `send` calls now go to the override.
+  const agentBackend = opts.agentBackendOverride ?? claude.backend;
 
   const transport: TelegramTransport =
     opts.transportOverride ??
@@ -149,7 +159,7 @@ export async function buildFullAppContainer(
     });
 
   const sendMessageToAgent = makeSendMessageToAgent({
-    backend: claude.backend,
+    backend: agentBackend,
     telegram: transport,
     resolver,
     sessionStore: stores.sessionStore,
@@ -164,7 +174,7 @@ export async function buildFullAppContainer(
   });
 
   const resetSession = makeResetSession({
-    backend: claude.backend,
+    backend: agentBackend,
     sessionStore: stores.sessionStore,
     locks: stores.lock,
   });
@@ -200,7 +210,7 @@ export async function buildFullAppContainer(
     resolver: workspaceResolver,
     allowedWorkspaceStore: stores.allowedWorkspaceStore,
     workspaceHistoryStore: stores.workspaceHistoryStore,
-    backend: claude.backend,
+    backend: agentBackend,
     refreshSnapshot: refresh,
     now: () => new Date(clock.nowMs()),
   });
@@ -223,7 +233,7 @@ export async function buildFullAppContainer(
     fs: fsPort,
     allowedWorkspaceStore: stores.allowedWorkspaceStore,
     workspaceHistoryStore: stores.workspaceHistoryStore,
-    backend: claude.backend,
+    backend: agentBackend,
     workspaceBase,
     refreshSnapshot: refresh,
     execCommand: defaultExecCommand,
