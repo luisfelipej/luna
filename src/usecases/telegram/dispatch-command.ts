@@ -17,6 +17,9 @@ export type CommandEffect =
   | { readonly kind: "showHelp" }
   | { readonly kind: "showStats" }
   | { readonly kind: "showWebhooks" }
+  | { readonly kind: "listJobs" }
+  | { readonly kind: "showJob"; readonly jobId: number }
+  | { readonly kind: "cancelJob"; readonly jobId: number }
   | { readonly kind: "notImplemented"; readonly area: "workspace" | "jobs" }
   | { readonly kind: "unknownCommand"; readonly command: string }
   | { readonly kind: "replyError"; readonly message: string };
@@ -84,6 +87,44 @@ export function dispatchCommand(cmd: ParsedCommand): CommandEffect {
       }
       return { kind: "setSetting", field: first, value: second };
     }
+    case "jobs":
+      return { kind: "listJobs" };
+    case "job": {
+      const [first, second] = args;
+      if (first === undefined) {
+        return { kind: "replyError", message: "Usage: /job <id> | /job cancel <id>" };
+      }
+      if (first === "cancel") {
+        if (second === undefined) {
+          return { kind: "replyError", message: "Usage: /job cancel <id>" };
+        }
+        const cid = Number(second);
+        if (!Number.isFinite(cid) || cid <= 0) {
+          return { kind: "replyError", message: "Invalid job id" };
+        }
+        return { kind: "cancelJob", jobId: cid };
+      }
+      const n = Number(first);
+      if (!Number.isFinite(n) || n <= 0) {
+        return { kind: "replyError", message: "Invalid job id" };
+      }
+      return { kind: "showJob", jobId: n };
+    }
+    case "jobs-cancel": {
+      const [first] = args;
+      if (first === undefined) {
+        return { kind: "replyError", message: "Usage: /jobs-cancel <id>" };
+      }
+      const cid = Number(first);
+      if (!Number.isFinite(cid) || cid <= 0) {
+        return { kind: "replyError", message: "Invalid job id" };
+      }
+      return { kind: "cancelJob", jobId: cid };
+    }
+    case "jobs-info":
+      // M1 exposes only /jobs, /job <id>, /job cancel <id>; keep /jobs-info as
+      // a stub so the command surface stays recognised but unimplemented.
+      return { kind: "notImplemented", area: "jobs" };
     default:
       if (WORKSPACE_CMDS.has(command)) return { kind: "notImplemented", area: "workspace" };
       if (JOB_CMDS.has(command)) return { kind: "notImplemented", area: "jobs" };

@@ -22,6 +22,9 @@ import { makeUpdateUserSettings } from "../usecases/update-user-settings.ts";
 import { makeRouteWebhookEvent } from "../usecases/http/route-webhook-event.ts";
 import { makeScheduleJob } from "../usecases/http/schedule-job.ts";
 import { makeSendProactiveMessage } from "../usecases/http/send-proactive-message.ts";
+import { makeRunScheduledFire } from "../usecases/scheduler/run-scheduled-fire.ts";
+import { makeCancelJob } from "../usecases/scheduler/cancel-job.ts";
+import { LoopScheduler } from "./scheduler/loop-scheduler.ts";
 import { buildClaudeAgentBackend } from "./claude-backend-container.ts";
 import { buildStoresContainer, storesOptionsFromEnv } from "./container.ts";
 import { buildRefreshableSnapshotResolver, type EnvReader } from "./snapshot-config-resolver.ts";
@@ -147,6 +150,24 @@ export async function buildFullAppContainer(
     locks: stores.lock,
   });
   const stopStream = makeStopStream({ aborts: claude.aborts });
+
+  // ── Scheduler (Phase 8) ─────────────────────────────────────────────
+  const scheduler = new LoopScheduler({ jobStore: stores.jobStore, clock });
+  const runScheduledFire = makeRunScheduledFire({
+    jobStore: stores.jobStore,
+    transport,
+    clock,
+    scheduler,
+    sendMessageToAgent: async (call) => {
+      await sendMessageToAgent({ chatId: call.chatId, text: call.text });
+      // No direct response text available — return an empty marker so the
+      // CONDITION_MET scan never triggers unless a future refactor threads
+      // the terminal assistant text back through the delegate. This matches
+      // spec #45: absence of marker leaves the job running.
+      return { text: "" };
+    },
+  });
+  const cancelJob = makeCancelJob({ jobStore: stores.jobStore, scheduler });
   const updateSettings = makeUpdateUserSettings({
     settings: stores.settingsStore,
     refreshSnapshot: refresh,
@@ -162,7 +183,7 @@ export async function buildFullAppContainer(
     adminChatId,
     routeWebhookEvent: makeRouteWebhookEvent({ transport, adminChatId }),
     sendProactiveMessage: makeSendProactiveMessage({ transport, allowList }),
-    scheduleJob: makeScheduleJob({ jobStore: stores.jobStore }),
+    scheduleJob: makeScheduleJob({ jobStore: stores.jobStore, scheduler }),
     jobStore: stores.jobStore,
     ...(opts.serviceProxy ? { serviceProxy: opts.serviceProxy } : {}),
   });
@@ -195,16 +216,18 @@ export async function buildFullAppContainer(
       return p ?? dataDir;
     },
     webhookStatus,
+    jobStore: stores.jobStore,
+    cancelJob,
   });
   presenter.register();
 
   const restoreOnStart = makeRestoreOnStart({
     transport,
     crashRecovery: claude.crashRecovery,
-    // Scheduler is Phase 8 — safe no-op here. When the scheduler lands,
-    // buildSchedulerContainer exposes `rehydrate()`; bind it here.
+    // Phase 8: scheduler starts (begins its timer loop) + loads all active
+    // jobs; catch-up happens inside `start` via rehydrate.
     rehydrateScheduler: async () => {
-      /* noop */
+      await scheduler.start(runScheduledFire);
     },
   });
 
@@ -228,10 +251,14 @@ export async function buildFullAppContainer(
         await webhookServer.stop();
       } finally {
         try {
-          await transport.stop();
+          await scheduler.stop();
         } finally {
-          await claude.shutdown();
-          stores.close();
+          try {
+            await transport.stop();
+          } finally {
+            await claude.shutdown();
+            stores.close();
+          }
         }
       }
     },

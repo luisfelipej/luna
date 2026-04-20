@@ -1,6 +1,11 @@
 import { ConfigError } from "../../entities/errors.ts";
 import type { Schedule, JobType } from "../../entities/job.ts";
-import type { JobStore } from "../../adapters/ports/job-store.port.ts";
+import type { JobRow, JobStore } from "../../adapters/ports/job-store.port.ts";
+
+export interface ScheduleJobHandle {
+  register(job: JobRow): Promise<void>;
+  unregister(jobId: number): Promise<void>;
+}
 
 export interface ScheduleJobInput {
   readonly chatId: number;
@@ -13,19 +18,24 @@ export interface ScheduleJobInput {
 
 export interface ScheduleJobOutput {
   readonly id: number;
-  /** Phase 7 stub — always `true` when persisted; Phase 8 wires a real scheduler. */
+  /** True once persisted + registered (Phase 8). */
   readonly accepted: boolean;
 }
 
 export interface ScheduleJobDeps {
   readonly jobStore: JobStore;
+  /**
+   * Optional scheduler handle. If supplied, newly-persisted jobs are
+   * immediately registered so they fire without waiting for a rehydrate.
+   * HTTP route tests can omit it to keep the stub shape.
+   */
+  readonly scheduler?: ScheduleJobHandle;
 }
 
 /**
- * Phase 7 stub: persist a job record via the store + return its id, but do
- * NOT register it with a live scheduler (that's Phase 8). The HTTP route
- * therefore returns 202 Accepted with the persisted id so the client can
- * correlate once scheduling goes live.
+ * Persist a job record + register it with the live scheduler (Phase 8).
+ * The scheduler handle is optional so legacy callers / isolated tests can
+ * still exercise the persistence path alone.
  */
 export function makeScheduleJob(deps: ScheduleJobDeps) {
   return async (input: ScheduleJobInput): Promise<ScheduleJobOutput> => {
@@ -40,6 +50,10 @@ export function makeScheduleJob(deps: ScheduleJobDeps) {
       autoRemove: input.autoRemove ?? false,
       createdAt: new Date(),
     });
+    if (deps.scheduler) {
+      const row = await deps.jobStore.get(id);
+      if (row) await deps.scheduler.register(row);
+    }
     return { id, accepted: true };
   };
 }

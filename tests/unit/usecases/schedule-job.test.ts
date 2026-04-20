@@ -2,7 +2,29 @@ import { describe, expect, it } from "bun:test";
 import { makeScheduleJob } from "../../../src/usecases/http/schedule-job.ts";
 import { FakeJobStore } from "../../helpers/fakes/fake-job-store.ts";
 
-describe("ScheduleJob (Phase 7 stub — persists only)", () => {
+describe("ScheduleJob — persist + register", () => {
+  it("registers the newly-persisted job with the scheduler", async () => {
+    const store = new FakeJobStore();
+    const registered: number[] = [];
+    const schedule = makeScheduleJob({
+      jobStore: store,
+      scheduler: {
+        register: async (job) => {
+          registered.push(job.id);
+        },
+        unregister: async () => {},
+      },
+    });
+    const { id } = await schedule({
+      chatId: 42,
+      name: "j",
+      jobType: "reminder",
+      prompt: "p",
+      schedule: { kind: "once", atIso: "2030-01-01T00:00:00Z" },
+    });
+    expect(registered).toEqual([id]);
+  });
+
   it("persists a `once` job and returns the assigned id", async () => {
     const store = new FakeJobStore();
     const schedule = makeScheduleJob({ jobStore: store });

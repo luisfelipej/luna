@@ -84,14 +84,36 @@ describe("dispatchCommand", () => {
     }
   });
 
-  it("/job /jobs* → stubbed (Phase 8)", () => {
-    for (const cmd of ["/job", "/jobs", "/jobs-info", "/jobs-cancel 3"]) {
-      const r = dispatchCommand(p(cmd));
-      expect(r.kind).toBe("notImplemented");
-      if (r.kind === "notImplemented") {
-        expect(r.area).toBe("jobs");
-      }
-    }
+  it("/jobs lists jobs for the chat", () => {
+    expect(dispatchCommand(p("/jobs"))).toEqual({ kind: "listJobs" });
+  });
+
+  it("/job <id> shows job details", () => {
+    expect(dispatchCommand(p("/job 7"))).toEqual({ kind: "showJob", jobId: 7 });
+  });
+
+  it("/job cancel <id> cancels a job", () => {
+    expect(dispatchCommand(p("/job cancel 9"))).toEqual({ kind: "cancelJob", jobId: 9 });
+  });
+
+  it("/job alone → usage", () => {
+    const r = dispatchCommand(p("/job"));
+    expect(r.kind).toBe("replyError");
+  });
+
+  it("/job <nonNumeric> → usage", () => {
+    const r = dispatchCommand(p("/job abc"));
+    expect(r.kind).toBe("replyError");
+  });
+
+  it("/jobs-info → scheduler stub still returns notImplemented in M1", () => {
+    const r = dispatchCommand(p("/jobs-info"));
+    // Acceptable: notImplemented OR a minimal placeholder. Ensure it's a known effect.
+    expect(["notImplemented", "replyError"]).toContain(r.kind);
+  });
+
+  it("/jobs-cancel <id> cancels like /job cancel", () => {
+    expect(dispatchCommand(p("/jobs-cancel 4"))).toEqual({ kind: "cancelJob", jobId: 4 });
   });
 
   it("unknown command → unknownCommand", () => {

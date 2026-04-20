@@ -27,9 +27,11 @@ export class FakeTimers {
     return { id, deadlineMs };
   };
 
-  clearTimeout = (handle: TimerHandle | null | undefined): void => {
-    if (!handle) return;
-    const idx = this.pending.findIndex((p) => p.id === handle.id);
+  clearTimeout = (handle: unknown): void => {
+    if (!handle || typeof handle !== "object") return;
+    const h = handle as { id?: number };
+    if (typeof h.id !== "number") return;
+    const idx = this.pending.findIndex((p) => p.id === h.id);
     if (idx >= 0) this.pending.splice(idx, 1);
   };
 

@@ -1,4 +1,5 @@
 import type { ConfigResolverPort } from "../adapters/ports/config-resolver.port.ts";
+import type { JobStore } from "../adapters/ports/job-store.port.ts";
 import type { SessionStore } from "../adapters/ports/session-store.port.ts";
 import type { TelegramTransport } from "../adapters/ports/telegram-transport.port.ts";
 import type { Model } from "../entities/backend-config.ts";
@@ -41,6 +42,13 @@ export interface TelegramPresenterDeps {
   readonly resolver: ConfigResolverPort;
   readonly workspacePath: (chatId: number) => string | Promise<string>;
   readonly webhookStatus: WebhookStatusProvider;
+  /**
+   * Optional — when supplied, `/jobs`, `/job <id>` and `/job cancel <id>`
+   * resolve against a live JobStore + cancel closure (Phase 8). Absent in
+   * legacy tests that don't exercise job commands.
+   */
+  readonly jobStore?: JobStore;
+  readonly cancelJob?: (jobId: number) => Promise<boolean>;
 }
 
 /**
@@ -135,11 +143,20 @@ export class TelegramPresenter {
           renderWebhookStatus({ endpoints: this.deps.webhookStatus.snapshot() }),
         );
         return;
+      case "listJobs":
+        await this.handleListJobs(chatId);
+        return;
+      case "showJob":
+        await this.handleShowJob(chatId, effect.jobId);
+        return;
+      case "cancelJob":
+        await this.handleCancelJob(chatId, effect.jobId);
+        return;
       case "notImplemented":
         await transport.sendMessage(
           chatId,
           `/${effect.area} commands are not yet implemented in M1 core.`,
-          // TODO(phase-${effect.area === "workspace" ? "10" : "8"}): wire real handlers.
+          // TODO(phase-10): wire workspace handlers.
         );
         return;
       case "unknownCommand":
@@ -151,6 +168,67 @@ export class TelegramPresenter {
     }
   }
 
+  private async handleListJobs(chatId: number): Promise<void> {
+    const { transport, jobStore } = this.deps;
+    if (!jobStore) {
+      await transport.sendMessage(chatId, "Job store not wired.");
+      return;
+    }
+    const rows = await jobStore.list(chatId);
+    if (rows.length === 0) {
+      await transport.sendMessage(chatId, "No scheduled jobs.");
+      return;
+    }
+    const lines = ["Your scheduled jobs:"];
+    for (const j of rows) {
+      lines.push(
+        `  #${j.id} ${j.name} [${j.jobType}] — ${describeSchedule(j.schedule)}${
+          j.active ? "" : " (paused)"
+        }`,
+      );
+    }
+    await transport.sendMessage(chatId, lines.join("\n"));
+  }
+
+  private async handleShowJob(chatId: number, jobId: number): Promise<void> {
+    const { transport, jobStore } = this.deps;
+    if (!jobStore) {
+      await transport.sendMessage(chatId, "Job store not wired.");
+      return;
+    }
+    const row = await jobStore.get(jobId);
+    if (!row || row.chatId !== chatId) {
+      await transport.sendMessage(chatId, `Job ${jobId} not found.`);
+      return;
+    }
+    await transport.sendMessage(
+      chatId,
+      [
+        `Job #${row.id}: ${row.name}`,
+        `  type: ${row.jobType}`,
+        `  schedule: ${describeSchedule(row.schedule)}`,
+        `  active: ${row.active}`,
+        `  auto_remove: ${row.autoRemove}`,
+        `  prompt: ${row.prompt}`,
+      ].join("\n"),
+    );
+  }
+
+  private async handleCancelJob(chatId: number, jobId: number): Promise<void> {
+    const { transport, jobStore, cancelJob } = this.deps;
+    if (!jobStore || !cancelJob) {
+      await transport.sendMessage(chatId, "Job scheduler not wired.");
+      return;
+    }
+    const existing = await jobStore.get(jobId);
+    if (!existing || existing.chatId !== chatId) {
+      await transport.sendMessage(chatId, `Job ${jobId} not found.`);
+      return;
+    }
+    const removed = await cancelJob(jobId);
+    await transport.sendMessage(chatId, removed ? `Job ${jobId} cancelled.` : "Nothing to cancel.");
+  }
+
   private async handleFreeText(chatId: number, text: string): Promise<void> {
     const ctrl = this.deps.aborts.register(chatId);
     try {
@@ -158,6 +236,17 @@ export class TelegramPresenter {
     } finally {
       this.deps.aborts.clear(chatId);
     }
+  }
+}
+
+function describeSchedule(s: import("../entities/job.ts").Schedule): string {
+  switch (s.kind) {
+    case "once":
+      return `once at ${s.atIso}`;
+    case "interval":
+      return `every ${s.seconds}s${s.firstRunIso ? ` (start ${s.firstRunIso})` : ""}`;
+    case "daily":
+      return `daily at ${s.timesUtc.join(", ")} UTC`;
   }
 }
 
