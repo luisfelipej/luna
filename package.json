@@ -1,0 +1,29 @@
+{
+  "name": "luna",
+  "version": "0.0.1",
+  "description": "Luna — Clean-Architecture TS port of Kai (Telegram ↔ agent bridge).",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "scripts": {
+    "dev": "bun run src/app/main.ts",
+    "start": "bun run src/app/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "fmt": "biome format --write .",
+    "fmt:check": "biome format ."
+  },
+  "dependencies": {
+    "grammy": "^1.30.0",
+    "pino": "^9.5.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}
