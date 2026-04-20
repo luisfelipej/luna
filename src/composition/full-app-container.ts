@@ -5,8 +5,10 @@ import type { ServiceProxyPort } from "../adapters/ports/service-proxy.port.ts";
 import type { TelegramTransport } from "../adapters/ports/telegram-transport.port.ts";
 import type { WebhookServerPort } from "../adapters/ports/webhook-server.port.ts";
 import { SystemClock } from "../infra/clock/system-clock.ts";
+import { ServicesRepo } from "../infra/config/services-repo.ts";
 import { UsersRepo } from "../infra/config/users-repo.ts";
 import { WorkspacesRepo } from "../infra/config/workspaces-repo.ts";
+import { UndiciServiceProxy } from "../infra/proxy/undici-service-proxy.ts";
 import type { LunaDb } from "../infra/db/client.ts";
 import type { SpawnPort } from "../infra/backends/spawn-port.ts";
 import { HonoWebhookServer } from "./http/hono-webhook-server.ts";
@@ -64,6 +66,12 @@ export interface BuildFullAppContainerOptions {
   readonly usersYamlPath?: string | null;
   readonly workspacesYamlPath?: string | null;
   /**
+   * Path to services.yaml. If null, the proxy is disabled (route 501s). If
+   * omitted, we look for `config/services.yaml` under cwd; if it's absent
+   * we silently skip (no proxy) to mirror Phase-7 behaviour.
+   */
+  readonly servicesYamlPath?: string | null;
+  /**
    * Override the webhook status provider (defaults to a live snapshot of
    * the wired `HonoWebhookServer`).
    */
@@ -104,6 +112,9 @@ export async function buildFullAppContainer(
     opts.workspacesYamlPath != null
       ? WorkspacesRepo.fromFile(opts.workspacesYamlPath)
       : new WorkspacesRepo("workspaces: []");
+
+  // Service proxy (Phase 9): wire only when services.yaml is present.
+  const serviceProxy = opts.serviceProxy ?? buildServiceProxy(env, opts.servicesYamlPath);
 
   const envReader = env as unknown as EnvReader;
   const { resolver, refresh } = await buildRefreshableSnapshotResolver({
@@ -185,7 +196,7 @@ export async function buildFullAppContainer(
     sendProactiveMessage: makeSendProactiveMessage({ transport, allowList }),
     scheduleJob: makeScheduleJob({ jobStore: stores.jobStore, scheduler }),
     jobStore: stores.jobStore,
-    ...(opts.serviceProxy ? { serviceProxy: opts.serviceProxy } : {}),
+    ...(serviceProxy ? { serviceProxy } : {}),
   });
 
   const defaultWebhookStatus: WebhookStatusProvider = {
@@ -263,6 +274,28 @@ export async function buildFullAppContainer(
       }
     },
   };
+}
+
+/**
+ * Build a UndiciServiceProxy from services.yaml if it exists. Explicit
+ * `null` path disables; `undefined` resolves to `config/services.yaml` under
+ * cwd and quietly returns undefined if the file is absent.
+ */
+function buildServiceProxy(
+  env: Record<string, string | undefined>,
+  path: string | null | undefined,
+): UndiciServiceProxy | undefined {
+  if (path === null) return undefined;
+  const candidate = path ?? join(process.cwd(), "config", "services.yaml");
+  let repo: ServicesRepo;
+  try {
+    repo = ServicesRepo.fromFile(candidate);
+  } catch {
+    // Missing file or parse error: skip. Production boot should pass an
+    // explicit path if the proxy is required.
+    return undefined;
+  }
+  return new UndiciServiceProxy({ repo, env });
 }
 
 function parseAllowList(raw: string): number[] {

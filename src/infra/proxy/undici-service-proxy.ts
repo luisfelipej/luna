@@ -106,7 +106,15 @@ export class UndiciServiceProxy implements ServiceProxyPort {
         bodyBuf = req.body as string | Buffer;
       } else {
         bodyBuf = JSON.stringify(req.body);
-        if (!("content-type" in Object.keys(headers).reduce((a, k) => ({ ...a, [k.toLowerCase()]: true }), {} as Record<string, boolean>))) {
+        if (
+          !(
+            "content-type" in
+            Object.keys(headers).reduce(
+              (a, k) => ({ ...a, [k.toLowerCase()]: true }),
+              {} as Record<string, boolean>,
+            )
+          )
+        ) {
           headers["content-type"] = "application/json";
         }
       }
@@ -160,9 +168,7 @@ export class UndiciServiceProxy implements ServiceProxyPort {
 
     const token = this.env[auth.env];
     if (!token) {
-      throw new ConfigError(
-        `service ${svc.name}: credential missing (env ${auth.env} is unset)`,
-      );
+      throw new ConfigError(`service ${svc.name}: credential missing (env ${auth.env} is unset)`);
     }
 
     switch (auth.mode) {

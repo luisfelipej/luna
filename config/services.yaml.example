@@ -1,11 +1,46 @@
+# services.yaml — example upstream services exposed through POST /api/service/:name.
+#
+# Every call to `/api/service/<name>` is routed through UndiciServiceProxy:
+#   1. DNS is resolved and vetted against the SSRF CIDR guard.
+#   2. The resolved IP is pinned for the connect() call — no rebind is possible.
+#   3. Auth is injected per the `auth` block (never logged).
+#   4. `headers`, `params`, optional body, and optional `allow_path_suffix`
+#      are merged with the static defaults below.
+#
+# Name must match /^[a-z0-9_-]+$/. `allow_internal: true` bypasses the SSRF
+# guard (useful for development fixtures on 127.x/::1) — DO NOT set in prod.
+
 services:
-  - name: weather
-    url: https://api.open-meteo.com/v1/forecast
-    method: GET
-    description: Open-Meteo forecast endpoint.
+  # ── OpenAI-style chat completions (bearer auth) ───────────────────────────
+  - name: openai
+    url: https://api.openai.com/v1/chat/completions
+    method: POST
+    description: OpenAI chat completions API (gpt-4o, etc.)
+    notes: |
+      Client POSTs a JSON body like `{model, messages, ...}`. We forward it as-is
+      with an injected Authorization: Bearer <$OPENAI_API_KEY>.
     auth:
-      mode: none
-    params:
-      current: temperature_2m
+      mode: bearer
+      env: OPENAI_API_KEY
+    headers:
+      Content-Type: application/json
     allow_path_suffix: false
+    allow_internal: false
+
+  # ── GitHub REST API (header auth, suffix-open for /repos/... etc) ────────
+  - name: github
+    url: https://api.github.com
+    method: GET
+    description: GitHub REST API v3.
+    notes: |
+      With allow_path_suffix: true, callers can hit arbitrary paths, e.g.
+      POST /api/service/github?pathSuffix=/repos/OWNER/REPO/issues.
+    auth:
+      mode: header
+      env: GITHUB_TOKEN
+      header: Authorization
+    headers:
+      Accept: application/vnd.github+json
+      X-GitHub-Api-Version: "2022-11-28"
+    allow_path_suffix: true
     allow_internal: false
