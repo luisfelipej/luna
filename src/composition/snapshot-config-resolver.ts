@@ -149,3 +149,48 @@ export class SnapshotConfigResolver implements ConfigResolverPort {
     );
   }
 }
+
+/** Mutable snapshot box — swaps the underlying map atomically on refresh. */
+interface MutableSnapshotBox {
+  current: SettingsSnapshot;
+}
+
+export interface BuildRefreshableResolverOptions {
+  readonly settings: SettingsStore;
+  readonly users: UsersRepo;
+  readonly workspaces: WorkspacesRepo;
+  readonly env: EnvReader;
+  readonly logger?: LoggerPort;
+}
+
+/**
+ * Builds a `SnapshotConfigResolver` whose underlying settings snapshot can
+ * be hot-swapped by calling `refresh()`. `UpdateUserSettings` binds this
+ * callback in the composition root so every `/settings` write shows up in
+ * a subsequent `resolve()` without a process restart.
+ *
+ * Thread-safety: `refresh()` loads a fresh map, then assigns it atomically
+ * to the box — readers always see a complete snapshot.
+ */
+export async function buildRefreshableSnapshotResolver(
+  opts: BuildRefreshableResolverOptions,
+): Promise<{ resolver: SnapshotConfigResolver; refresh: (chatId?: number) => Promise<void> }> {
+  const box: MutableSnapshotBox = {
+    current: await loadSettingsSnapshot(opts.settings),
+  };
+  const snapshot: SettingsSnapshot = {
+    get: (key) => box.current.get(key),
+  };
+  const deps: SnapshotResolverDeps = {
+    snapshot,
+    users: opts.users,
+    workspaces: opts.workspaces,
+    env: opts.env,
+    ...(opts.logger ? { logger: opts.logger } : {}),
+  };
+  const resolver = new SnapshotConfigResolver(deps);
+  const refresh = async (_chatId?: number): Promise<void> => {
+    box.current = await loadSettingsSnapshot(opts.settings);
+  };
+  return { resolver, refresh };
+}
