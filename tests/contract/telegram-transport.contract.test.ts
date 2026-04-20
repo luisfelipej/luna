@@ -9,8 +9,7 @@ describe("TelegramTransport contract — FakeTelegramTransport", () => {
     return {
       transport: t,
       sent: () => t.sent.map((s) => ({ chatId: s.chatId, text: s.text })),
-      edits: () =>
-        t.edits.map((e) => ({ chatId: e.chatId, messageId: e.messageId, text: e.text })),
+      edits: () => t.edits.map((e) => ({ chatId: e.chatId, messageId: e.messageId, text: e.text })),
       files: () => t.files.slice(),
     };
   });

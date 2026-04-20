@@ -66,6 +66,12 @@ export interface BuildClaudeBackendOptions {
   /** Override the claude binary path. */
   readonly claudeBinary?: string;
   readonly logger?: LoggerPort;
+  /**
+   * Resolves the session id for `claude --resume <sid>` on each spawn.
+   * Defaults to a SessionStore-backed lookup so multi-turn conversations
+   * survive backend restarts (Phase 6 session-continuity wiring).
+   */
+  readonly resumeSessionId?: (chatId: number) => Promise<string | null>;
 }
 
 /**
@@ -84,6 +90,13 @@ export function buildClaudeAgentBackend(opts: BuildClaudeBackendOptions): Claude
   const spawn = opts.spawn ?? nodeSpawnPort;
   const claudeBinary = opts.claudeBinary ?? "claude";
 
+  const resumeSessionId =
+    opts.resumeSessionId ??
+    (async (chatId: number): Promise<string | null> => {
+      const row = await opts.stores.sessionStore.get(chatId);
+      return row?.sessionId ?? null;
+    });
+
   const pool = new BackendPool({
     clock,
     locks,
@@ -98,6 +111,7 @@ export function buildClaudeAgentBackend(opts: BuildClaudeBackendOptions): Claude
         spawn,
         claudeBinary,
         sessionStore: opts.stores.sessionStore,
+        resumeSessionId,
       }),
   });
 
@@ -141,16 +155,14 @@ function createPooledEntry(args: {
   spawn: SpawnPort;
   claudeBinary: string;
   sessionStore: StoresContainer["sessionStore"];
+  resumeSessionId: (chatId: number) => Promise<string | null>;
 }): PooledClaudeEntry {
   const backend = new ClaudeCodeBackend({
     spawn: args.spawn,
     command: args.claudeBinary,
     cwd: args.cwd,
     ...(args.logger ? { logger: args.logger } : {}),
-    resumeSessionId: (_chatId) => null,
-    // ^ Resume is handled by Phase 6 when wiring session_id carry-over on
-    // new sends; the backend itself does not pre-fetch here. Callers can
-    // pass a closure in Phase 6.
+    resumeSessionId: args.resumeSessionId,
   });
   const entry: PooledClaudeEntry = {
     chatId: args.chatId,

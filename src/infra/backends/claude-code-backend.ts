@@ -11,7 +11,7 @@ export interface ClaudeCodeBackendOptions {
   readonly spawn?: SpawnPort;
   readonly command?: string;
   readonly cwd?: string;
-  readonly resumeSessionId?: (chatId: number) => string | null;
+  readonly resumeSessionId?: (chatId: number) => string | null | Promise<string | null>;
   readonly logger?: LoggerPort;
   /** Extra args injected before `--output-format` for test hooks. */
   readonly extraArgs?: readonly string[];
@@ -37,7 +37,7 @@ export class ClaudeCodeBackend implements AgentBackendPort {
   private readonly spawn: SpawnPort;
   private readonly command: string;
   private readonly cwd: string | undefined;
-  private readonly resumeSessionId: (chatId: number) => string | null;
+  private readonly resumeSessionId: (chatId: number) => string | null | Promise<string | null>;
   private readonly logger: LoggerPort | undefined;
   private readonly extraArgs: readonly string[];
 
@@ -58,7 +58,13 @@ export class ClaudeCodeBackend implements AgentBackendPort {
     cfg: BackendConfig,
     signal: AbortSignal,
   ): AsyncIterable<StreamChunk> {
-    const args = this.buildArgs(chatId, cfg);
+    // Resolve resume sid synchronously when the getter returned a plain value;
+    // otherwise await so async SessionStore-backed loaders work too. Keeping
+    // the sync fast-path lets FakeSpawn-driven tests rely on microtask-
+    // scheduled seeding without an extra tick between send() and spawn().
+    const resumeRaw = this.resumeSessionId(chatId);
+    const resume = isThenable(resumeRaw) ? await resumeRaw : resumeRaw;
+    const args = this.buildArgs(cfg, resume);
     const proc = this.spawn(this.command, args, {
       ...(this.cwd !== undefined ? { cwd: this.cwd } : {}),
     });
@@ -102,10 +108,9 @@ export class ClaudeCodeBackend implements AgentBackendPort {
     }
   }
 
-  private buildArgs(chatId: number, cfg: BackendConfig): string[] {
+  private buildArgs(cfg: BackendConfig, resume: string | null): string[] {
     const args = ["--output-format", "stream-json", "--input-format", "stream-json"];
     args.push("--model", cfg.model);
-    const resume = this.resumeSessionId(chatId);
     if (resume) args.push("--resume", resume);
     for (const extra of this.extraArgs) args.push(extra);
     return args;
@@ -156,4 +161,10 @@ export class ClaudeCodeBackend implements AgentBackendPort {
 export function wrapBackendError(err: unknown): BackendError {
   if (err instanceof BackendError) return err;
   return new BackendError(err instanceof Error ? err.message : String(err), err);
+}
+
+function isThenable<T>(v: T | Promise<T>): v is Promise<T> {
+  return (
+    v !== null && typeof v === "object" && typeof (v as { then?: unknown }).then === "function"
+  );
 }
