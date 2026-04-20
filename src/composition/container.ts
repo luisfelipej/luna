@@ -32,6 +32,8 @@ import {
 } from "../infra/telegram/grammy-transport.ts";
 import { makeSendMessageToAgent } from "../usecases/send-message-to-agent.ts";
 import { TracerEnvSchema } from "./env-schema.ts";
+import type { ResolvableField } from "../adapters/ports/config-resolver.port.ts";
+import type { MessageLine } from "../entities/message.ts";
 
 export interface TracerContainer {
   start(): Promise<void>;
@@ -57,20 +59,28 @@ export function buildTracerContainer(opts: BuildTracerContainerOptions): TracerC
     allowList: env.TELEGRAM_ALLOWED_IDS,
   });
   const backend = new EchoBackend();
+  const clock = new SystemClock();
+  const tracerHistory = tracerHistoryStore();
+  const tracerCrash = tracerCrashRecoveryPort();
+  const tracerSession = tracerSessionStore();
+  // ^ in-memory session store stub so the full SendMessageToAgent pipeline
+  // (with SessionStore.upsert on done) has an impl to talk to without
+  // requiring migrated SQLite for the tracer.
   const sendMessageToAgent = makeSendMessageToAgent({
     backend,
     telegram: transport,
-    defaultConfig: {
-      model: "sonnet",
-      timeoutS: 300,
-      budgetUsd: 0,
-      contextWindow: 200_000,
-    },
+    resolver: tracerResolver(),
+    sessionStore: tracerSession,
+    historyStore: tracerHistory,
+    crashRecovery: tracerCrash,
+    locks: new AsyncMutexLockPort(),
+    clock,
+    resolveWorkspacePath: () => "/",
   });
 
   transport.onUpdate(async ({ chatId, text }) => {
     if (text === undefined) return;
-    await sendMessageToAgent(chatId, text);
+    await sendMessageToAgent({ chatId, text });
   });
 
   return {
@@ -164,5 +174,73 @@ export function storesOptionsFromEnv(env: RealModeEnv): BuildStoresContainerOpti
   return {
     dbUrl: env.LUNA_DB_URL ?? join(dataDir, "luna.db"),
     historyDir: join(dataDir, "history"),
+  };
+}
+
+// ── tracer helpers ────────────────────────────────────────────────────────
+// In-memory stubs used only by `buildTracerContainer` so the full
+// SendMessageToAgent pipeline (resolver, session store, history, crash
+// recovery, locks) can run without touching disk. Real-mode wiring is handled
+// by `buildStoresContainer` + Phase 5.12 composition.
+
+function tracerResolver() {
+  const DEFAULTS: Record<ResolvableField, { value: string | number; tier: 6 }> = {
+    model: { value: "sonnet", tier: 6 },
+    timeoutSeconds: { value: 300, tier: 6 },
+    maxBudgetUsd: { value: 0, tier: 6 },
+    contextWindow: { value: 200_000, tier: 6 },
+    idleTimeoutMin: { value: 15, tier: 6 },
+  };
+  return {
+    resolve(_c: number, _w: string, field: ResolvableField) {
+      return DEFAULTS[field];
+    },
+  };
+}
+
+function tracerHistoryStore(): HistoryStore {
+  const lines: MessageLine[] = [];
+  return {
+    async append(_chatId: number, line: MessageLine) {
+      lines.push(line);
+    },
+    async tail(chatId: number, n: number) {
+      return lines.filter((l) => l.chatId === chatId).slice(-n);
+    },
+  };
+}
+
+function tracerCrashRecoveryPort() {
+  const pending = new Set<number>();
+  return {
+    async mark(chatId: number) {
+      pending.add(chatId);
+    },
+    async clear(chatId: number) {
+      pending.delete(chatId);
+    },
+    async listPending() {
+      return [...pending];
+    },
+  };
+}
+
+function tracerSessionStore(): SessionStore {
+  const rows = new Map<number, import("../adapters/ports/session-store.port.ts").SessionRow>();
+  return {
+    async get(chatId) {
+      return rows.get(chatId) ?? null;
+    },
+    async upsert(row) {
+      rows.set(row.chatId, { ...row });
+    },
+    async clear(chatId) {
+      rows.delete(chatId);
+    },
+    async addCost(chatId, delta) {
+      const r = rows.get(chatId);
+      if (!r) return;
+      rows.set(chatId, { ...r, totalCostUsd: r.totalCostUsd + delta });
+    },
   };
 }
