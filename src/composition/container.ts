@@ -13,6 +13,14 @@ import { SqliteJobStore } from "../infra/db/sqlite-job-store.ts";
 import { SqliteSessionStore } from "../infra/db/sqlite-session-store.ts";
 import { SqliteSettingsStore } from "../infra/db/sqlite-settings-store.ts";
 import { SqliteWorkspaceHistoryStore } from "../infra/db/sqlite-workspace-history-store.ts";
+import {
+  loadSettingsSnapshot,
+  SnapshotConfigResolver,
+  type EnvReader,
+} from "./snapshot-config-resolver.ts";
+import { UsersRepo } from "../infra/config/users-repo.ts";
+import { WorkspacesRepo } from "../infra/config/workspaces-repo.ts";
+import type { ConfigResolverPort } from "../adapters/ports/config-resolver.port.ts";
 import { JsonlHistoryStore } from "../infra/fs/jsonl-history-store.ts";
 import { NodeFsPort } from "../infra/fs/node-fs-port.ts";
 import { AsyncMutexLockPort } from "../infra/locks/async-mutex-lock-port.ts";
@@ -121,6 +129,23 @@ export function buildStoresContainer(opts: BuildStoresContainerOptions): StoresC
       db.$raw.close();
     },
   };
+}
+
+/**
+ * Phase-4 add-on: build the live `ConfigResolverPort` once the settings
+ * snapshot + YAML repos are in hand.
+ */
+export async function buildConfigResolver(
+  stores: StoresContainer,
+  opts: { usersYamlPath: string; workspacesYamlPath: string; env: EnvReader },
+): Promise<ConfigResolverPort> {
+  const snapshot = await loadSettingsSnapshot(stores.settingsStore);
+  return new SnapshotConfigResolver({
+    snapshot,
+    users: UsersRepo.fromFile(opts.usersYamlPath),
+    workspaces: WorkspacesRepo.fromFile(opts.workspacesYamlPath),
+    env: opts.env,
+  });
 }
 
 /** Env keys the Phase-3 real-mode wiring consults. */
