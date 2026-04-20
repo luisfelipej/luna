@@ -1,12 +1,15 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ConfigResolverPort } from "../adapters/ports/config-resolver.port.ts";
+import type { ServiceProxyPort } from "../adapters/ports/service-proxy.port.ts";
 import type { TelegramTransport } from "../adapters/ports/telegram-transport.port.ts";
+import type { WebhookServerPort } from "../adapters/ports/webhook-server.port.ts";
 import { SystemClock } from "../infra/clock/system-clock.ts";
 import { UsersRepo } from "../infra/config/users-repo.ts";
 import { WorkspacesRepo } from "../infra/config/workspaces-repo.ts";
 import type { LunaDb } from "../infra/db/client.ts";
 import type { SpawnPort } from "../infra/backends/spawn-port.ts";
+import { HonoWebhookServer } from "./http/hono-webhook-server.ts";
 import {
   GrammyTelegramTransport,
   realGrammyBotFactory,
@@ -16,6 +19,9 @@ import { makeResetSession } from "../usecases/reset-session.ts";
 import { makeStopStream } from "../usecases/stop-stream.ts";
 import { makeSendMessageToAgent } from "../usecases/send-message-to-agent.ts";
 import { makeUpdateUserSettings } from "../usecases/update-user-settings.ts";
+import { makeRouteWebhookEvent } from "../usecases/http/route-webhook-event.ts";
+import { makeScheduleJob } from "../usecases/http/schedule-job.ts";
+import { makeSendProactiveMessage } from "../usecases/http/send-proactive-message.ts";
 import { buildClaudeAgentBackend } from "./claude-backend-container.ts";
 import { buildStoresContainer, storesOptionsFromEnv } from "./container.ts";
 import { buildRefreshableSnapshotResolver, type EnvReader } from "./snapshot-config-resolver.ts";
@@ -39,6 +45,7 @@ export interface FullAppContainer {
   /** Exposed for tests; not used by `main.ts`. */
   readonly transport: TelegramTransport;
   readonly resolver: ConfigResolverPort;
+  readonly webhookServer: WebhookServerPort;
   readonly shutdownBackend: () => Promise<void>;
 }
 
@@ -54,13 +61,21 @@ export interface BuildFullAppContainerOptions {
   readonly usersYamlPath?: string | null;
   readonly workspacesYamlPath?: string | null;
   /**
-   * Webhook status provider (Phase 7 wires the real HTTP server here; until
-   * then the default provider returns an empty endpoint list).
+   * Override the webhook status provider (defaults to a live snapshot of
+   * the wired `HonoWebhookServer`).
    */
   readonly webhookStatus?: WebhookStatusProvider;
+  /**
+   * If true (default), boot the Hono HTTP server on start and stop it on
+   * stop. Tests disable this to avoid binding sockets.
+   */
+  readonly startHttpServer?: boolean;
+  /**
+   * Phase 9 supplies the real ServiceProxyPort; Phase 7 leaves this
+   * undefined so `POST /api/service/:name` replies 501.
+   */
+  readonly serviceProxy?: ServiceProxyPort;
 }
-
-const EMPTY_WEBHOOK_STATUS: WebhookStatusProvider = { snapshot: () => [] };
 
 export async function buildFullAppContainer(
   opts: BuildFullAppContainerOptions,
@@ -137,6 +152,26 @@ export async function buildFullAppContainer(
     refreshSnapshot: refresh,
   });
 
+  // ── HTTP server (Phase 7) ───────────────────────────────────────────
+  const adminChatId = allowList[0] ?? 0;
+  const httpPort = Number(env.HTTP_PORT ?? 8080);
+  const webhookServer = new HonoWebhookServer({
+    githubSecret: env.GITHUB_WEBHOOK_SECRET,
+    genericSecret: env.GENERIC_WEBHOOK_SECRET,
+    apiSecret: env.GENERIC_WEBHOOK_SECRET,
+    adminChatId,
+    routeWebhookEvent: makeRouteWebhookEvent({ transport, adminChatId }),
+    sendProactiveMessage: makeSendProactiveMessage({ transport, allowList }),
+    scheduleJob: makeScheduleJob({ jobStore: stores.jobStore }),
+    jobStore: stores.jobStore,
+    ...(opts.serviceProxy ? { serviceProxy: opts.serviceProxy } : {}),
+  });
+
+  const defaultWebhookStatus: WebhookStatusProvider = {
+    snapshot: () => webhookServer.status().endpoints,
+  };
+  const webhookStatus = opts.webhookStatus ?? defaultWebhookStatus;
+
   const presenter = new TelegramPresenter({
     transport,
     aborts: claude.aborts,
@@ -159,7 +194,7 @@ export async function buildFullAppContainer(
       const p = await stores.workspaceHistoryStore.getCurrent(chatId);
       return p ?? dataDir;
     },
-    webhookStatus: opts.webhookStatus ?? EMPTY_WEBHOOK_STATUS,
+    webhookStatus,
   });
   presenter.register();
 
@@ -173,20 +208,31 @@ export async function buildFullAppContainer(
     },
   });
 
+  const startHttpServer = opts.startHttpServer ?? true;
+
   return {
     transport,
     resolver,
+    webhookServer,
     shutdownBackend: () => claude.shutdown(),
     async start() {
       await restoreOnStart();
       await transport.start();
+      if (startHttpServer) {
+        await webhookServer.start(httpPort);
+      }
     },
     async stop() {
+      // Stop HTTP first so no late requests hit a torn-down backend.
       try {
-        await transport.stop();
+        await webhookServer.stop();
       } finally {
-        await claude.shutdown();
-        stores.close();
+        try {
+          await transport.stop();
+        } finally {
+          await claude.shutdown();
+          stores.close();
+        }
       }
     },
   };
