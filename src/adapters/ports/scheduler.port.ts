@@ -13,5 +13,11 @@ export interface SchedulerPort {
   start(fire: SchedulerFire): Promise<void>;
   register(job: JobRow): Promise<void>;
   unregister(jobId: number): Promise<void>;
+  /**
+   * Rebuild the in-memory timeline from persistent state. Called by
+   * `RestoreOnStart` at boot and by `ScheduleJob` tests that want to force a
+   * full rehydrate after bulk inserts.
+   */
+  rehydrate(): Promise<void>;
   stop(): Promise<void>;
 }
