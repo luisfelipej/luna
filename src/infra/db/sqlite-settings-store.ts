@@ -1,7 +1,4 @@
-import type {
-  SettingsEntry,
-  SettingsStore,
-} from "../../adapters/ports/settings-store.port.ts";
+import type { SettingsEntry, SettingsStore } from "../../adapters/ports/settings-store.port.ts";
 import type { LunaDb } from "./client.ts";
 
 /**
@@ -13,9 +10,9 @@ export class SqliteSettingsStore implements SettingsStore {
   constructor(private readonly db: LunaDb) {}
 
   async get(key: string): Promise<string | null> {
-    const row = this.db.$raw
-      .prepare("SELECT value FROM settings WHERE key = ?")
-      .get(key) as { value: string } | undefined;
+    const row = this.db.$raw.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
+      | { value: string }
+      | undefined;
     return row?.value ?? null;
   }
 

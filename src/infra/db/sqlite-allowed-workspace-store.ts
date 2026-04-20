@@ -41,9 +41,7 @@ export class SqliteAllowedWorkspaceStore implements AllowedWorkspaceStore {
   }
 
   async remove(chatId: number, path: string): Promise<void> {
-    this.db.$raw
-      .prepare("DELETE FROM workspaces WHERE chat_id = ? AND path = ?")
-      .run(chatId, path);
+    this.db.$raw.prepare("DELETE FROM workspaces WHERE chat_id = ? AND path = ?").run(chatId, path);
   }
 
   async touch(chatId: number, path: string, now: Date): Promise<void> {

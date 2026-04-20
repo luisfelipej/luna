@@ -31,9 +31,7 @@ export class SqliteJobStore implements JobStore {
   }
 
   async get(id: number): Promise<JobRow | null> {
-    const row = this.db.$raw.prepare("SELECT * FROM jobs WHERE id = ?").get(id) as
-      | Row
-      | undefined;
+    const row = this.db.$raw.prepare("SELECT * FROM jobs WHERE id = ?").get(id) as Row | undefined;
     return row ? this.toPort(row) : null;
   }
 

@@ -2,11 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { JobStore, NewJob } from "../../src/adapters/ports/job-store.port.ts";
 import type { Schedule } from "../../src/entities/job.ts";
 
-function sampleJob(
-  chatId: number,
-  schedule: Schedule,
-  over: Partial<NewJob> = {},
-): NewJob {
+function sampleJob(chatId: number, schedule: Schedule, over: Partial<NewJob> = {}): NewJob {
   return {
     chatId,
     name: over.name ?? "daily-report",
@@ -35,9 +31,7 @@ export function jobStoreContract(
 
     test("schedule roundtrips for every kind", async () => {
       const s = await makeStore();
-      const onceId = await s.insert(
-        sampleJob(10, { kind: "once", atIso: "2025-05-01T00:00:00Z" }),
-      );
+      const onceId = await s.insert(sampleJob(10, { kind: "once", atIso: "2025-05-01T00:00:00Z" }));
       const intId = await s.insert(sampleJob(10, { kind: "interval", seconds: 30 }));
       const dailyId = await s.insert(
         sampleJob(10, { kind: "daily", timesUtc: ["09:00", "18:00"] }),

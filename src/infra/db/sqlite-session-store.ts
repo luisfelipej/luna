@@ -1,7 +1,4 @@
-import type {
-  SessionRow,
-  SessionStore,
-} from "../../adapters/ports/session-store.port.ts";
+import type { SessionRow, SessionStore } from "../../adapters/ports/session-store.port.ts";
 import type { Model } from "../../entities/backend-config.ts";
 import type { LunaDb } from "./client.ts";
 
@@ -42,13 +39,7 @@ export class SqliteSessionStore implements SessionStore {
            total_cost_usd = excluded.total_cost_usd,
            last_used_at = excluded.last_used_at`,
       )
-      .run(
-        row.chatId,
-        row.sessionId,
-        row.model,
-        row.totalCostUsd,
-        row.lastUsedAt.toISOString(),
-      );
+      .run(row.chatId, row.sessionId, row.model, row.totalCostUsd, row.lastUsedAt.toISOString());
   }
 
   async clear(chatId: number): Promise<void> {

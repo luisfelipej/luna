@@ -2,7 +2,9 @@ import { Database } from "bun:sqlite";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
 
-export type LunaDb = BunSQLiteDatabase<typeof schema> & { $raw: Database };
+export interface LunaDb extends BunSQLiteDatabase<typeof schema> {
+  $raw: Database;
+}
 
 /**
  * Open a SQLite database at `url` (pass `:memory:` for tests) and wire it to
@@ -24,8 +26,8 @@ export function openDb(url: string): LunaDb {
   raw.exec("PRAGMA journal_mode = WAL");
   raw.exec("PRAGMA busy_timeout = 5000");
   raw.exec("PRAGMA foreign_keys = ON");
-  const db = drizzle(raw, { schema }) as LunaDb;
-  db.$raw = raw;
+  const drizzled = drizzle(raw, { schema });
+  const db = Object.assign(drizzled, { $raw: raw }) as LunaDb;
   return db;
 }
 
