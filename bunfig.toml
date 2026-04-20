@@ -1,2 +1,3 @@
 [test]
-preload = []
+# preload modules for bun:test (empty for Phase 0)
+
