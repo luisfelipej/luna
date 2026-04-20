@@ -91,6 +91,7 @@ describe("makeRestoreOnStart", () => {
       transport,
       crashRecovery: crash,
       logger: {
+        debug() {},
         info() {},
         warn(m: string) {
           loggerMsgs.push(m);

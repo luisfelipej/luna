@@ -139,6 +139,7 @@ describe("GrammyTelegramTransport", () => {
     const bot = makeFakeBot();
     const warns: Array<{ msg: string; meta?: object }> = [];
     const logger = {
+      debug() {},
       info() {},
       warn(msg: string, meta?: object) {
         warns.push(meta !== undefined ? { msg, meta } : { msg });
@@ -168,6 +169,7 @@ describe("GrammyTelegramTransport", () => {
     const bot = makeFakeBot();
     const warns: string[] = [];
     const logger = {
+      debug() {},
       info() {},
       warn(msg: string) {
         warns.push(msg);
