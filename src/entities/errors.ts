@@ -7,7 +7,6 @@
  */
 export abstract class LunaError extends Error {
   abstract readonly code: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   override readonly cause?: unknown;
 
   constructor(message: string, cause?: unknown) {

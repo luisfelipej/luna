@@ -8,13 +8,21 @@ import type {
  * Minimal structural type covering the grammY Bot API the tracer needs.
  * We accept the real `Bot` as well as an injected fake in tests.
  */
+/** Shape of the update passed to `on("message:text", ...)` handlers. */
+export interface GrammyMessageTextCtx {
+  message: {
+    text: string;
+    chat: { id: number };
+    from: { id: number };
+  };
+}
+
 export interface GrammyLikeBot {
   api: {
     sendMessage(chatId: number, text: string): Promise<unknown>;
     deleteWebhook(opts: { drop_pending_updates: boolean }): Promise<unknown>;
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  on(event: "message:text", handler: (ctx: any) => Promise<void> | void): void;
+  on(event: "message:text", handler: (ctx: GrammyMessageTextCtx) => Promise<void> | void): void;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -38,9 +46,7 @@ export class GrammyTelegramTransport implements TelegramTransport {
   constructor(opts: GrammyTelegramTransportOptions) {
     this.bot = opts.botFactory();
     this.allowed = new Set(opts.allowList);
-    this.bot.on("message:text", async (ctx: {
-      message: { text: string; chat: { id: number }; from: { id: number } };
-    }) => {
+    this.bot.on("message:text", async (ctx) => {
       const fromId = ctx.message.from.id;
       if (!this.allowed.has(fromId)) return; // silently drop
       if (!this.handler) return;

@@ -42,9 +42,7 @@ describe("EnvSchema", () => {
   });
 
   it("rejects malformed TELEGRAM_ALLOWED_IDS", () => {
-    expect(() => loadEnv({ ...minimalValid, TELEGRAM_ALLOWED_IDS: "42,abc" })).toThrow(
-      ConfigError,
-    );
+    expect(() => loadEnv({ ...minimalValid, TELEGRAM_ALLOWED_IDS: "42,abc" })).toThrow(ConfigError);
   });
 
   it("parses optional LUNA_MODEL literal", () => {

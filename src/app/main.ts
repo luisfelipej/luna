@@ -15,7 +15,6 @@ async function main(): Promise<void> {
     try {
       await container.stop();
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error(`[luna] error during shutdown on ${signal}:`, err);
       process.exit(1);
       return;
@@ -32,7 +31,6 @@ async function main(): Promise<void> {
 
   if (dryRun) {
     // keep the event loop alive until a signal arrives
-    // eslint-disable-next-line no-console
     console.log("[luna] dry-run mode: waiting for signal");
     // A long-lived interval keeps the loop alive; signal handlers call exit().
     const keepAlive = setInterval(() => {
@@ -44,12 +42,10 @@ async function main(): Promise<void> {
   }
 
   await container.start();
-  // eslint-disable-next-line no-console
   console.log("[luna] tracer up; polling Telegram");
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error("[luna] fatal:", err);
   process.exit(1);
 });

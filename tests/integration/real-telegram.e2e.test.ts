@@ -26,9 +26,7 @@ describeIfE2E("real Telegram E2E", () => {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const chatIdRaw = process.env.LUNA_E2E_CHAT_ID;
     if (!token || !chatIdRaw) {
-      throw new Error(
-        "LUNA_E2E=1 requires TELEGRAM_BOT_TOKEN and LUNA_E2E_CHAT_ID",
-      );
+      throw new Error("LUNA_E2E=1 requires TELEGRAM_BOT_TOKEN and LUNA_E2E_CHAT_ID");
     }
     const chatId = Number(chatIdRaw);
 

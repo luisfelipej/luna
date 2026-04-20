@@ -37,8 +37,6 @@ describe("UsersYamlSchema", () => {
   });
 
   it("rejects negative budget_usd", () => {
-    expect(() =>
-      UsersYamlSchema.parse({ users: [{ telegram_id: 1, budget_usd: -1 }] }),
-    ).toThrow();
+    expect(() => UsersYamlSchema.parse({ users: [{ telegram_id: 1, budget_usd: -1 }] })).toThrow();
   });
 });
