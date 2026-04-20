@@ -1,7 +1,17 @@
 import { buildTracerContainer } from "../composition/container.ts";
+import { buildFullAppContainer } from "../composition/full-app-container.ts";
 
+/**
+ * Boot the bot in either tracer mode (default until Phase 11 promotes full
+ * mode) or full mode when `LUNA_MODE=full` is set. Both expose a common
+ * `{ start, stop }` contract so signal handling is identical.
+ */
 async function main(): Promise<void> {
-  const container = buildTracerContainer({ env: process.env });
+  const mode = (process.env.LUNA_MODE ?? "tracer").toLowerCase();
+  const container =
+    mode === "full"
+      ? await buildFullAppContainer({ env: process.env })
+      : buildTracerContainer({ env: process.env });
 
   // Dry-run: build the container + install signal handlers, but don't poll
   // Telegram. Used by tests that verify graceful shutdown without a real
@@ -31,7 +41,7 @@ async function main(): Promise<void> {
 
   if (dryRun) {
     // keep the event loop alive until a signal arrives
-    console.log("[luna] dry-run mode: waiting for signal");
+    console.log(`[luna] dry-run mode (${mode}): waiting for signal`);
     // A long-lived interval keeps the loop alive; signal handlers call exit().
     const keepAlive = setInterval(() => {
       /* noop */
@@ -42,7 +52,7 @@ async function main(): Promise<void> {
   }
 
   await container.start();
-  console.log("[luna] tracer up; polling Telegram");
+  console.log(`[luna] ${mode} mode up; polling Telegram`);
 }
 
 main().catch((err) => {
