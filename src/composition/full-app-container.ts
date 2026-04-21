@@ -152,12 +152,17 @@ export async function buildFullAppContainer(
     error: (m, meta) => console.error("[error]", m, meta ?? ""),
     child: () => consoleLogger,
   };
+  const claudeBin = process.env.CLAUDE_BIN?.trim();
+  const skipPerms = process.env.CLAUDE_SKIP_PERMISSIONS === "1";
+  const extraClaudeArgs = skipPerms ? ["--dangerously-skip-permissions"] : [];
   const claude = buildClaudeAgentBackend({
     stores,
     resolver,
     clock,
     dataDir,
     logger: consoleLogger,
+    extraClaudeArgs,
+    ...(claudeBin ? { claudeBinary: claudeBin } : {}),
     ...(opts.spawnOverride ? { spawn: opts.spawnOverride } : {}),
   });
   // When a test passes a stub AgentBackend, the pooled backend is bypassed.

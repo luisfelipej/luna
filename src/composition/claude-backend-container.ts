@@ -65,6 +65,8 @@ export interface BuildClaudeBackendOptions {
   readonly spawn?: SpawnPort;
   /** Override the claude binary path. */
   readonly claudeBinary?: string;
+  /** Extra args appended to every `claude` invocation (e.g. permission flags). */
+  readonly extraClaudeArgs?: readonly string[];
   readonly logger?: LoggerPort;
   /**
    * Resolves the session id for `claude --resume <sid>` on each spawn.
@@ -89,6 +91,7 @@ export function buildClaudeAgentBackend(opts: BuildClaudeBackendOptions): Claude
   const idleTimeoutMs = opts.idleTimeoutMs ?? 15 * 60 * 1000;
   const spawn = opts.spawn ?? nodeSpawnPort;
   const claudeBinary = opts.claudeBinary ?? "claude";
+  const extraClaudeArgs = opts.extraClaudeArgs ?? [];
 
   const resumeSessionId =
     opts.resumeSessionId ??
@@ -110,6 +113,7 @@ export function buildClaudeAgentBackend(opts: BuildClaudeBackendOptions): Claude
         logger: opts.logger,
         spawn,
         claudeBinary,
+        extraClaudeArgs,
         sessionStore: opts.stores.sessionStore,
         resumeSessionId,
       }),
@@ -154,6 +158,7 @@ function createPooledEntry(args: {
   logger: LoggerPort | undefined;
   spawn: SpawnPort;
   claudeBinary: string;
+  extraClaudeArgs: readonly string[];
   sessionStore: StoresContainer["sessionStore"];
   resumeSessionId: (chatId: number) => Promise<string | null>;
 }): PooledClaudeEntry {
@@ -161,6 +166,7 @@ function createPooledEntry(args: {
     spawn: args.spawn,
     command: args.claudeBinary,
     cwd: args.cwd,
+    extraArgs: args.extraClaudeArgs,
     ...(args.logger ? { logger: args.logger } : {}),
     resumeSessionId: args.resumeSessionId,
   });
