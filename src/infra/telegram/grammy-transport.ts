@@ -37,6 +37,9 @@ export interface GrammyLikeBot {
     ): Promise<unknown>;
     sendDocument(chatId: number, doc: unknown, other?: { caption?: string }): Promise<unknown>;
     deleteWebhook(opts: { drop_pending_updates: boolean }): Promise<unknown>;
+    setMyCommands(
+      commands: ReadonlyArray<{ command: string; description: string }>,
+    ): Promise<unknown>;
   };
   on(event: "message:text", handler: (ctx: GrammyMessageTextCtx) => Promise<void> | void): void;
   start(opts?: { onStart?: (info: { username: string }) => void }): Promise<void>;
@@ -50,6 +53,13 @@ export interface GrammyTelegramTransportOptions {
   allowList: readonly number[];
   /** Optional logger — receives WARN on truncation + markdown fallback. */
   logger?: LoggerPort;
+  /**
+   * Slash-command menu registered with Telegram on start() via
+   * `setMyCommands`. Shown in the `/` autocomplete popup. Optional — if
+   * omitted, no menu is published (existing menu on Telegram's side is
+   * preserved).
+   */
+  commandMenu?: ReadonlyArray<{ command: string; description: string }>;
 }
 
 /** Telegram's hard cap on message body length. */
@@ -87,12 +97,14 @@ export class GrammyTelegramTransport implements TelegramTransport {
   private readonly bot: GrammyLikeBot;
   private readonly allowed: ReadonlySet<number>;
   private readonly logger: LoggerPort | undefined;
+  private readonly commandMenu: ReadonlyArray<{ command: string; description: string }>;
   private handler: TelegramUpdateHandler | null = null;
 
   constructor(opts: GrammyTelegramTransportOptions) {
     this.bot = opts.botFactory();
     this.allowed = new Set(opts.allowList);
     this.logger = opts.logger;
+    this.commandMenu = opts.commandMenu ?? [];
     this.bot.on("message:text", async (ctx) => {
       const fromId = ctx.message.from.id;
       if (!this.allowed.has(fromId)) {
@@ -184,6 +196,13 @@ export class GrammyTelegramTransport implements TelegramTransport {
       console.error("[luna] telegram middleware error:", err);
     });
     await this.bot.api.deleteWebhook({ drop_pending_updates: false });
+    if (this.commandMenu.length > 0) {
+      try {
+        await this.bot.api.setMyCommands([...this.commandMenu]);
+      } catch (err) {
+        this.logger?.warn("telegram: setMyCommands failed", { err: String(err) });
+      }
+    }
     // grammY's bot.start() returns a promise that only resolves when the bot
     // STOPS. Awaiting it would block boot forever. Fire-and-forget; errors in
     // the long-poll loop surface via the bot's error handler.

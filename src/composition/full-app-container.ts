@@ -17,6 +17,7 @@ import {
   GrammyTelegramTransport,
   realGrammyBotFactory,
 } from "../infra/telegram/grammy-transport.ts";
+import { LUNA_COMMAND_MENU } from "./telegram-command-menu.ts";
 import { makeRestoreOnStart } from "../usecases/restore-on-start.ts";
 import { makeResetSession } from "../usecases/reset-session.ts";
 import { makeStopStream } from "../usecases/stop-stream.ts";
@@ -170,6 +171,7 @@ export async function buildFullAppContainer(
       botFactory: realGrammyBotFactory(token),
       allowList,
       logger: consoleLogger,
+      commandMenu: LUNA_COMMAND_MENU,
     });
 
   const sendMessageToAgent = makeSendMessageToAgent({
