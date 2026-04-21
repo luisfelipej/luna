@@ -435,31 +435,31 @@ describe("HonoWebhookServer — live Bun.serve", () => {
   });
 
   describe("GET /api/sessions", () => {
-    it("returns non-500 when sessionStore is injected (tracer)", async () => {
+    it("returns 400 when chat_id is missing", async () => {
       fx = await makeFixture({ sessionStore: new FakeSessionStore() });
       const r = await fetch(`${fx.baseUrl}/api/sessions`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
-      expect(r.status).not.toBe(500);
+      expect(r.status).toBe(400);
     });
 
     it("returns 401 when no bearer token provided", async () => {
       fx = await makeFixture({ sessionStore: new FakeSessionStore() });
-      const r = await fetch(`${fx.baseUrl}/api/sessions`);
+      const r = await fetch(`${fx.baseUrl}/api/sessions?chat_id=42`);
       expect(r.status).toBe(401);
     });
 
     it("returns 501 when sessionStore is not injected", async () => {
       fx = await makeFixture();
-      const r = await fetch(`${fx.baseUrl}/api/sessions`, {
+      const r = await fetch(`${fx.baseUrl}/api/sessions?chat_id=42`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
       expect(r.status).toBe(501);
     });
 
-    it("returns empty array when no sessions exist", async () => {
+    it("returns empty array when no sessions exist for chat", async () => {
       fx = await makeFixture({ sessionStore: new FakeSessionStore() });
-      const r = await fetch(`${fx.baseUrl}/api/sessions`, {
+      const r = await fetch(`${fx.baseUrl}/api/sessions?chat_id=42`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
       expect(r.status).toBe(200);
@@ -468,7 +468,7 @@ describe("HonoWebhookServer — live Bun.serve", () => {
       expect((body as unknown[]).length).toBe(0);
     });
 
-    it("returns session rows as JSON array", async () => {
+    it("returns filtered session rows for the given chat_id", async () => {
       const sessionStore = new FakeSessionStore();
       await sessionStore.upsert({
         chatId: 42,
@@ -477,8 +477,15 @@ describe("HonoWebhookServer — live Bun.serve", () => {
         totalCostUsd: 0.5,
         lastUsedAt: new Date("2025-01-01T00:00:00Z"),
       });
+      await sessionStore.upsert({
+        chatId: 99,
+        sessionId: "sid-other",
+        model: "opus",
+        totalCostUsd: 1.0,
+        lastUsedAt: new Date("2025-01-02T00:00:00Z"),
+      });
       fx = await makeFixture({ sessionStore });
-      const r = await fetch(`${fx.baseUrl}/api/sessions`, {
+      const r = await fetch(`${fx.baseUrl}/api/sessions?chat_id=42`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
       expect(r.status).toBe(200);
@@ -491,25 +498,25 @@ describe("HonoWebhookServer — live Bun.serve", () => {
   });
 
   describe("GET /api/workspaces", () => {
-    it("returns non-500 when allowedWorkspaceStore is injected (tracer)", async () => {
+    it("returns 400 when chat_id is missing", async () => {
       fx = await makeFixture({ allowedWorkspaceStore: new FakeAllowedWorkspaceStore() });
       const r = await fetch(`${fx.baseUrl}/api/workspaces`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
-      expect(r.status).not.toBe(500);
+      expect(r.status).toBe(400);
     });
 
     it("returns 501 when allowedWorkspaceStore is not injected", async () => {
       fx = await makeFixture();
-      const r = await fetch(`${fx.baseUrl}/api/workspaces`, {
+      const r = await fetch(`${fx.baseUrl}/api/workspaces?chat_id=42`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
       expect(r.status).toBe(501);
     });
 
-    it("returns empty array when no workspaces exist", async () => {
+    it("returns empty array when no workspaces exist for chat", async () => {
       fx = await makeFixture({ allowedWorkspaceStore: new FakeAllowedWorkspaceStore() });
-      const r = await fetch(`${fx.baseUrl}/api/workspaces`, {
+      const r = await fetch(`${fx.baseUrl}/api/workspaces?chat_id=42`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
       expect(r.status).toBe(200);
@@ -518,12 +525,13 @@ describe("HonoWebhookServer — live Bun.serve", () => {
       expect((body as unknown[]).length).toBe(0);
     });
 
-    it("returns workspace rows as JSON array", async () => {
+    it("returns filtered workspace rows for the given chat_id", async () => {
       const allowedWorkspaceStore = new FakeAllowedWorkspaceStore();
-      await allowedWorkspaceStore.add(10, "/workspaces/alpha", new Date("2025-01-01T00:00:00Z"));
-      await allowedWorkspaceStore.add(20, "/workspaces/beta", new Date("2025-01-02T00:00:00Z"));
+      await allowedWorkspaceStore.add(42, "/workspaces/alpha", new Date("2025-01-01T00:00:00Z"));
+      await allowedWorkspaceStore.add(42, "/workspaces/beta", new Date("2025-01-02T00:00:00Z"));
+      await allowedWorkspaceStore.add(99, "/workspaces/other", new Date("2025-01-03T00:00:00Z"));
       fx = await makeFixture({ allowedWorkspaceStore });
-      const r = await fetch(`${fx.baseUrl}/api/workspaces`, {
+      const r = await fetch(`${fx.baseUrl}/api/workspaces?chat_id=42`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
       expect(r.status).toBe(200);
@@ -535,45 +543,47 @@ describe("HonoWebhookServer — live Bun.serve", () => {
   });
 
   describe("GET /api/settings", () => {
-    it("returns non-500 when settingsStore is injected (tracer)", async () => {
+    it("returns 400 when chat_id is missing", async () => {
       fx = await makeFixture({ settingsStore: new FakeSettingsStore() });
       const r = await fetch(`${fx.baseUrl}/api/settings`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
-      expect(r.status).not.toBe(500);
+      expect(r.status).toBe(400);
     });
 
     it("returns 501 when settingsStore is not injected", async () => {
       fx = await makeFixture();
-      const r = await fetch(`${fx.baseUrl}/api/settings`, {
+      const r = await fetch(`${fx.baseUrl}/api/settings?chat_id=42`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
       expect(r.status).toBe(501);
     });
 
-    it("returns empty array when no settings exist", async () => {
+    it("returns empty array when no settings exist for chat", async () => {
       fx = await makeFixture({ settingsStore: new FakeSettingsStore() });
-      const r = await fetch(`${fx.baseUrl}/api/settings`, {
+      const r = await fetch(`${fx.baseUrl}/api/settings?chat_id=42`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
       expect(r.status).toBe(200);
       const body = await r.json();
       expect(Array.isArray(body)).toBe(true);
+      expect((body as unknown[]).length).toBe(0);
     });
 
-    it("returns settings entries as key-value array", async () => {
+    it("returns user_config settings entries for the given chat_id", async () => {
       const settingsStore = new FakeSettingsStore();
-      await settingsStore.set("model:42", "opus");
-      await settingsStore.set("timeout_s:42", "120");
+      await settingsStore.set("user_config:42:model", "opus");
+      await settingsStore.set("user_config:42:timeout_s", "120");
+      await settingsStore.set("user_config:99:model", "haiku");
       fx = await makeFixture({ settingsStore });
-      const r = await fetch(`${fx.baseUrl}/api/settings`, {
+      const r = await fetch(`${fx.baseUrl}/api/settings?chat_id=42`, {
         headers: { authorization: `Bearer ${API_SECRET}` },
       });
       expect(r.status).toBe(200);
       const body = (await r.json()) as Array<Record<string, unknown>>;
       expect(body.length).toBe(2);
       const keys = body.map((e) => e.key).sort();
-      expect(keys).toEqual(["model:42", "timeout_s:42"]);
+      expect(keys).toEqual(["user_config:42:model", "user_config:42:timeout_s"]);
     });
   });
 

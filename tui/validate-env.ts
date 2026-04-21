@@ -5,7 +5,7 @@ export interface TuiConfig {
   apiSecret: string;
   pollMs: number;
   dataDir: string;
-  chatId: string;
+  chatId: number;
 }
 
 /**
@@ -38,9 +38,15 @@ export function validateEnv(
   // DATA_DIR: optional — defaults to cwd. Used by LogPanel for JSONL tail.
   const dataDir = env["DATA_DIR"] ?? process.cwd();
 
-  // LUNA_CHAT_ID: optional — used by LogPanel to find per-chat log file.
-  // Defaults to empty string (LogPanel shows "No log entries today" gracefully).
-  const chatId = env["LUNA_CHAT_ID"] ?? "";
+  // LUNA_CHAT_ID: required — used to filter per-chat API responses and log tail.
+  const chatIdRaw = env["LUNA_CHAT_ID"];
+  if (!chatIdRaw) {
+    throw new Error("LUNA_CHAT_ID is required. Set it to your Telegram chat ID (a numeric value).");
+  }
+  const chatId = Number(chatIdRaw);
+  if (!Number.isInteger(chatId) || chatId <= 0) {
+    throw new Error(`LUNA_CHAT_ID must be a positive integer, got: ${chatIdRaw}`);
+  }
 
   return { apiUrl, apiSecret, pollMs, dataDir, chatId };
 }

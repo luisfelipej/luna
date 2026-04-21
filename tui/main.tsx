@@ -36,7 +36,11 @@ try {
   process.exit(1);
 }
 
-const client = createApiClient({ baseUrl: config.apiUrl, secret: config.apiSecret });
+const client = createApiClient({
+  baseUrl: config.apiUrl,
+  secret: config.apiSecret,
+  chatId: config.chatId,
+});
 
 // ── Root App component ────────────────────────────────────────────────────
 function App() {

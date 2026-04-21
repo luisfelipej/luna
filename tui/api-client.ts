@@ -53,6 +53,8 @@ export interface ApiClientOptions {
   baseUrl: string;
   /** Bearer token — same value as GENERIC_WEBHOOK_SECRET on the server */
   secret: string;
+  /** Telegram chat ID — appended as ?chat_id=X to per-chat endpoints */
+  chatId: number;
 }
 
 export interface ApiClient {
@@ -80,17 +82,17 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
 
   return {
     async fetchSessions(): Promise<SessionRow[]> {
-      const data = await apiFetch("/api/sessions");
+      const data = await apiFetch(`/api/sessions?chat_id=${opts.chatId}`);
       return data as SessionRow[];
     },
 
     async fetchWorkspaces(): Promise<WorkspaceRow[]> {
-      const data = await apiFetch("/api/workspaces");
+      const data = await apiFetch(`/api/workspaces?chat_id=${opts.chatId}`);
       return data as WorkspaceRow[];
     },
 
     async fetchSettings(): Promise<SettingsEntry[]> {
-      const data = await apiFetch("/api/settings");
+      const data = await apiFetch(`/api/settings?chat_id=${opts.chatId}`);
       return data as SettingsEntry[];
     },
 

@@ -17,37 +17,44 @@ export interface MonitoringStores {
  * Called from HonoWebhookServer.buildApp() after the api sub-app is created.
  */
 export function mountMonitoringRoutes(api: Hono, stores: MonitoringStores): void {
-  // GET /api/sessions — returns all session rows across all chats
+  // GET /api/sessions?chat_id=X — returns session row for the given chat
   api.get("/sessions", async (c) => {
-    if (!stores.sessionStore) {
-      return c.json({ error: "sessionStore not configured" }, 501);
-    }
+    const chatId = parseChatId(c.req.query("chat_id"));
+    if (chatId === null) return c.json({ error: "chat_id query param required" }, 400);
+    if (!stores.sessionStore) return c.json({ error: "sessionStore not configured" }, 501);
     const rows = await stores.sessionStore.listAll();
-    return c.json(rows.map(serializeSession));
+    return c.json(rows.filter((r) => r.chatId === chatId).map(serializeSession));
   });
 
-  // GET /api/workspaces — returns all allowed workspace rows across all chats
+  // GET /api/workspaces?chat_id=X — returns allowed workspaces for the given chat
   api.get("/workspaces", async (c) => {
-    if (!stores.allowedWorkspaceStore) {
+    const chatId = parseChatId(c.req.query("chat_id"));
+    if (chatId === null) return c.json({ error: "chat_id query param required" }, 400);
+    if (!stores.allowedWorkspaceStore)
       return c.json({ error: "allowedWorkspaceStore not configured" }, 501);
-    }
     const rows = await stores.allowedWorkspaceStore.listAll();
     return c.json(
-      rows.map((w) => ({
-        chat_id: w.chatId,
-        path: w.path,
-        added_at: w.addedAt.toISOString(),
-        last_used_at: w.lastUsedAt ? w.lastUsedAt.toISOString() : null,
-      })),
+      rows
+        .filter((w) => w.chatId === chatId)
+        .map((w) => ({
+          chat_id: w.chatId,
+          path: w.path,
+          added_at: w.addedAt.toISOString(),
+          last_used_at: w.lastUsedAt ? w.lastUsedAt.toISOString() : null,
+        })),
     );
   });
 
-  // GET /api/settings — returns all settings entries (key-value pairs)
+  // GET /api/settings?chat_id=X — returns settings entries for the given chat
   api.get("/settings", async (c) => {
-    if (!stores.settingsStore) {
-      return c.json({ error: "settingsStore not configured" }, 501);
-    }
-    const entries = await stores.settingsStore.listPrefix("");
+    const chatId = parseChatId(c.req.query("chat_id"));
+    if (chatId === null) return c.json({ error: "chat_id query param required" }, 400);
+    if (!stores.settingsStore) return c.json({ error: "settingsStore not configured" }, 501);
+    const [userEntries, wsEntries] = await Promise.all([
+      stores.settingsStore.listPrefix(`user_config:${chatId}:`),
+      stores.settingsStore.listPrefix(`ws_config:${chatId}:`),
+    ]);
+    const entries = [...userEntries, ...wsEntries];
     return c.json(entries.map(serializeSettings));
   });
 
@@ -71,6 +78,12 @@ export function mountMonitoringRoutes(api: Hono, stores: MonitoringStores): void
       })),
     });
   });
+}
+
+function parseChatId(raw: string | undefined): number | null {
+  if (raw === undefined || raw === "") return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 function serializeSession(r: SessionRow): Record<string, unknown> {

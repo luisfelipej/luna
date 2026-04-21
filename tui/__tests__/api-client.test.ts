@@ -33,6 +33,7 @@ describe("api-client", () => {
       const client = createApiClient({
         baseUrl: `http://127.0.0.1:${mockServer.port}`,
         secret: "test-secret",
+        chatId: 42,
       });
 
       const sessions = await client.fetchSessions();
@@ -57,6 +58,7 @@ describe("api-client", () => {
       const client = createApiClient({
         baseUrl: `http://127.0.0.1:${mockServer.port}`,
         secret: "my-secret",
+        chatId: 42,
       });
       await client.fetchSessions();
       expect(receivedAuth).toBe("Bearer my-secret");
@@ -72,6 +74,7 @@ describe("api-client", () => {
       const client = createApiClient({
         baseUrl: `http://127.0.0.1:${mockServer.port}`,
         secret: "bad-secret",
+        chatId: 42,
       });
       await expect(client.fetchSessions()).rejects.toThrow();
     } finally {
@@ -105,6 +108,7 @@ describe("api-client", () => {
       const client = createApiClient({
         baseUrl: `http://127.0.0.1:${mockServer.port}`,
         secret: "s",
+        chatId: 42,
       });
       const workspaces = await client.fetchWorkspaces();
       expect(Array.isArray(workspaces)).toBe(true);
@@ -133,6 +137,7 @@ describe("api-client", () => {
       const client = createApiClient({
         baseUrl: `http://127.0.0.1:${mockServer.port}`,
         secret: "s",
+        chatId: 42,
       });
       const settings = await client.fetchSettings();
       expect(Array.isArray(settings)).toBe(true);
@@ -164,6 +169,7 @@ describe("api-client", () => {
       const client = createApiClient({
         baseUrl: `http://127.0.0.1:${mockServer.port}`,
         secret: "s",
+        chatId: 42,
       });
       const status = await client.fetchWebhookStatus();
       expect(status.running).toBe(true);
@@ -202,6 +208,7 @@ describe("api-client", () => {
       const client = createApiClient({
         baseUrl: `http://127.0.0.1:${mockServer.port}`,
         secret: "s",
+        chatId: 42,
       });
       const jobs = await client.fetchJobs();
       expect(Array.isArray(jobs)).toBe(true);
