@@ -39,7 +39,7 @@ export interface GrammyLikeBot {
     deleteWebhook(opts: { drop_pending_updates: boolean }): Promise<unknown>;
   };
   on(event: "message:text", handler: (ctx: GrammyMessageTextCtx) => Promise<void> | void): void;
-  start(): Promise<void>;
+  start(opts?: { onStart?: (info: { username: string }) => void }): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -95,8 +95,17 @@ export class GrammyTelegramTransport implements TelegramTransport {
     this.logger = opts.logger;
     this.bot.on("message:text", async (ctx) => {
       const fromId = ctx.message.from.id;
-      if (!this.allowed.has(fromId)) return; // silently drop
-      if (!this.handler) return;
+      if (!this.allowed.has(fromId)) {
+        this.logger?.warn("telegram: dropped update from non-allowed user", {
+          fromId,
+          allowed: [...this.allowed],
+        });
+        return;
+      }
+      if (!this.handler) {
+        this.logger?.warn("telegram: no update handler registered", { fromId });
+        return;
+      }
       await this.handler({
         chatId: ctx.message.chat.id,
         fromId,
@@ -165,8 +174,30 @@ export class GrammyTelegramTransport implements TelegramTransport {
   }
 
   async start(): Promise<void> {
+    // Install a top-level error handler so grammY does not auto-stop on
+    // middleware errors (e.g., transient Telegram API failures).
+    const botWithCatch = this.bot as typeof this.bot & {
+      catch?: (h: (err: unknown) => void) => void;
+    };
+    botWithCatch.catch?.((err) => {
+      this.logger?.error("telegram middleware error", { err: String(err) });
+      console.error("[luna] telegram middleware error:", err);
+    });
     await this.bot.api.deleteWebhook({ drop_pending_updates: false });
-    await this.bot.start();
+    // grammY's bot.start() returns a promise that only resolves when the bot
+    // STOPS. Awaiting it would block boot forever. Fire-and-forget; errors in
+    // the long-poll loop surface via the bot's error handler.
+    this.bot
+      .start({
+        onStart: (info) => {
+          this.logger?.info("telegram polling started", { username: info.username });
+          console.log(`[luna] telegram polling started as @${info.username}`);
+        },
+      })
+      .catch((err) => {
+        this.logger?.error("telegram: bot.start failed", { err: String(err) });
+        console.error("[luna] telegram bot.start failed:", err);
+      });
   }
 
   async stop(): Promise<void> {

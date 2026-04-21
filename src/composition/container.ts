@@ -53,10 +53,20 @@ export interface BuildTracerContainerOptions {
 export function buildTracerContainer(opts: BuildTracerContainerOptions): TracerContainer {
   const env = TracerEnvSchema.parse(opts.env);
   const botFactory = opts.botFactory ?? realGrammyBotFactory(env.TELEGRAM_BOT_TOKEN);
+  const consoleLogger: import("../adapters/ports/logger.port.ts").LoggerPort = {
+    debug: (m, meta) => console.log("[debug]", m, meta ?? ""),
+    info: (m, meta) => console.log("[info]", m, meta ?? ""),
+    warn: (m, meta) => console.warn("[warn]", m, meta ?? ""),
+    error: (m, meta) => console.error("[error]", m, meta ?? ""),
+    child() {
+      return consoleLogger;
+    },
+  };
 
   const transport = new GrammyTelegramTransport({
     botFactory,
     allowList: env.TELEGRAM_ALLOWED_IDS,
+    logger: consoleLogger,
   });
   const backend = new EchoBackend();
   const clock = new SystemClock();

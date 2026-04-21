@@ -38,7 +38,10 @@ import { spawn as childSpawn } from "node:child_process";
 import { LoopScheduler } from "./scheduler/loop-scheduler.ts";
 import { buildClaudeAgentBackend } from "./claude-backend-container.ts";
 import { buildStoresContainer, storesOptionsFromEnv } from "./container.ts";
-import { buildRefreshableSnapshotResolver, type EnvReader } from "./snapshot-config-resolver.ts";
+import {
+  buildRefreshableSnapshotResolver,
+  type EnvReader,
+} from "./snapshot-config-resolver.ts";
 import { TelegramPresenter } from "./telegram-presenter.ts";
 import type { WebhookStatusProvider } from "../usecases/telegram/views.ts";
 
@@ -129,7 +132,8 @@ export async function buildFullAppContainer(
       : new WorkspacesRepo("workspaces: []");
 
   // Service proxy (Phase 9): wire only when services.yaml is present.
-  const serviceProxy = opts.serviceProxy ?? buildServiceProxy(env, opts.servicesYamlPath);
+  const serviceProxy =
+    opts.serviceProxy ?? buildServiceProxy(env, opts.servicesYamlPath);
 
   const envReader = env as unknown as EnvReader;
   const { resolver, refresh } = await buildRefreshableSnapshotResolver({
@@ -140,11 +144,19 @@ export async function buildFullAppContainer(
   });
 
   const clock = new SystemClock();
+  const consoleLogger: import("../adapters/ports/logger.port.ts").LoggerPort = {
+    debug: (m, meta) => console.log("[debug]", m, meta ?? ""),
+    info: (m, meta) => console.log("[info]", m, meta ?? ""),
+    warn: (m, meta) => console.warn("[warn]", m, meta ?? ""),
+    error: (m, meta) => console.error("[error]", m, meta ?? ""),
+    child: () => consoleLogger,
+  };
   const claude = buildClaudeAgentBackend({
     stores,
     resolver,
     clock,
     dataDir,
+    logger: consoleLogger,
     ...(opts.spawnOverride ? { spawn: opts.spawnOverride } : {}),
   });
   // When a test passes a stub AgentBackend, the pooled backend is bypassed.
@@ -157,6 +169,7 @@ export async function buildFullAppContainer(
     new GrammyTelegramTransport({
       botFactory: realGrammyBotFactory(token),
       allowList,
+      logger: consoleLogger,
     });
 
   const sendMessageToAgent = makeSendMessageToAgent({
@@ -394,7 +407,8 @@ function parseAllowList(raw: string): number[] {
     .filter((s) => s.length > 0)
     .map((s) => {
       const n = Number(s);
-      if (!Number.isInteger(n)) throw new Error(`invalid TELEGRAM_ALLOWED_IDS entry: ${s}`);
+      if (!Number.isInteger(n))
+        throw new Error(`invalid TELEGRAM_ALLOWED_IDS entry: ${s}`);
       return n;
     });
 }
@@ -414,9 +428,11 @@ function applyBundledMigrations(db: LunaDb): string[] {
     .filter((f) => f.endsWith(".sql"))
     .sort();
   const applied = new Set(
-    (raw.prepare("SELECT name FROM _migrations").all() as Array<{ name: string }>).map(
-      (r) => r.name,
-    ),
+    (
+      raw.prepare("SELECT name FROM _migrations").all() as Array<{
+        name: string;
+      }>
+    ).map((r) => r.name),
   );
   const newlyApplied: string[] = [];
   for (const file of files) {
