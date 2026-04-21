@@ -1,6 +1,6 @@
 {
   "name": "luna",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "Luna — Clean-Architecture TS port of Kai (Telegram ↔ agent bridge).",
   "type": "module",
   "private": true,
