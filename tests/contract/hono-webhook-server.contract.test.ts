@@ -7,6 +7,7 @@ import { makeSendProactiveMessage } from "../../src/usecases/http/send-proactive
 import type { ServiceProxyPort } from "../../src/adapters/ports/service-proxy.port.ts";
 import { FakeJobStore } from "../helpers/fakes/fake-job-store.ts";
 import { FakeTelegramTransport } from "../helpers/fakes/fake-telegram-transport.ts";
+import { FakeSessionStore } from "../helpers/fakes/fake-session-store.ts";
 
 const GH_SECRET = "gh-s3cr3t";
 const GEN_SECRET = "gen-s3cr3t";
@@ -30,6 +31,7 @@ async function makeFixture(
     genericSecret?: string | undefined;
     apiSecret?: string | undefined;
     serviceProxy?: ServiceProxyPort;
+    sessionStore?: FakeSessionStore;
   } = {},
 ): Promise<Fixture> {
   const transport = new FakeTelegramTransport();
@@ -47,6 +49,7 @@ async function makeFixture(
     scheduleJob: makeScheduleJob({ jobStore }),
     jobStore,
     ...(opts.serviceProxy ? { serviceProxy: opts.serviceProxy } : {}),
+    ...(opts.sessionStore ? { sessionStore: opts.sessionStore } : {}),
   });
   await server.start(0); // ephemeral port
   const { port } = server.status();
@@ -422,6 +425,62 @@ describe("HonoWebhookServer — live Bun.serve", () => {
         body: JSON.stringify({ chat_id: ADMIN_CHAT, path: "/tmp/../etc/passwd" }),
       });
       expect(r.status).toBe(403);
+    });
+  });
+
+  describe("GET /api/sessions", () => {
+    it("returns non-500 when sessionStore is injected (tracer)", async () => {
+      fx = await makeFixture({ sessionStore: new FakeSessionStore() });
+      const r = await fetch(`${fx.baseUrl}/api/sessions`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).not.toBe(500);
+    });
+
+    it("returns 401 when no bearer token provided", async () => {
+      fx = await makeFixture({ sessionStore: new FakeSessionStore() });
+      const r = await fetch(`${fx.baseUrl}/api/sessions`);
+      expect(r.status).toBe(401);
+    });
+
+    it("returns 501 when sessionStore is not injected", async () => {
+      fx = await makeFixture();
+      const r = await fetch(`${fx.baseUrl}/api/sessions`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(501);
+    });
+
+    it("returns empty array when no sessions exist", async () => {
+      fx = await makeFixture({ sessionStore: new FakeSessionStore() });
+      const r = await fetch(`${fx.baseUrl}/api/sessions`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(Array.isArray(body)).toBe(true);
+      expect((body as unknown[]).length).toBe(0);
+    });
+
+    it("returns session rows as JSON array", async () => {
+      const sessionStore = new FakeSessionStore();
+      await sessionStore.upsert({
+        chatId: 42,
+        sessionId: "sid-x",
+        model: "sonnet",
+        totalCostUsd: 0.5,
+        lastUsedAt: new Date("2025-01-01T00:00:00Z"),
+      });
+      fx = await makeFixture({ sessionStore });
+      const r = await fetch(`${fx.baseUrl}/api/sessions`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as Array<Record<string, unknown>>;
+      expect(body.length).toBe(1);
+      expect(body[0]?.chat_id).toBe(42);
+      expect(body[0]?.session_id).toBe("sid-x");
+      expect(body[0]?.model).toBe("sonnet");
     });
   });
 });
