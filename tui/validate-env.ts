@@ -4,6 +4,8 @@ export interface TuiConfig {
   apiUrl: string;
   apiSecret: string;
   pollMs: number;
+  dataDir: string;
+  chatId: string;
 }
 
 /**
@@ -33,5 +35,12 @@ export function validateEnv(
   const parsedPollMs = pollMsRaw !== undefined ? Number(pollMsRaw) : NaN;
   const pollMs = Number.isFinite(parsedPollMs) && parsedPollMs > 0 ? parsedPollMs : DEFAULT_POLL_MS;
 
-  return { apiUrl, apiSecret, pollMs };
+  // DATA_DIR: optional — defaults to cwd. Used by LogPanel for JSONL tail.
+  const dataDir = env["DATA_DIR"] ?? process.cwd();
+
+  // LUNA_CHAT_ID: optional — used by LogPanel to find per-chat log file.
+  // Defaults to empty string (LogPanel shows "No log entries today" gracefully).
+  const chatId = env["LUNA_CHAT_ID"] ?? "";
+
+  return { apiUrl, apiSecret, pollMs, dataDir, chatId };
 }

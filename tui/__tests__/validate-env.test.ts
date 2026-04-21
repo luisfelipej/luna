@@ -47,4 +47,39 @@ describe("validateEnv", () => {
     });
     expect(config.pollMs).toBe(2000);
   });
+
+  it("uses DATA_DIR when provided", () => {
+    const config = validateEnv({
+      LUNA_API_URL: "http://localhost:8080",
+      LUNA_API_SECRET: "my-secret",
+      DATA_DIR: "/data/luna",
+    });
+    expect(config.dataDir).toBe("/data/luna");
+  });
+
+  it("defaults dataDir to cwd when DATA_DIR is absent", () => {
+    const config = validateEnv({
+      LUNA_API_URL: "http://localhost:8080",
+      LUNA_API_SECRET: "my-secret",
+    });
+    expect(typeof config.dataDir).toBe("string");
+    expect(config.dataDir.length).toBeGreaterThan(0);
+  });
+
+  it("uses LUNA_CHAT_ID when provided", () => {
+    const config = validateEnv({
+      LUNA_API_URL: "http://localhost:8080",
+      LUNA_API_SECRET: "my-secret",
+      LUNA_CHAT_ID: "42",
+    });
+    expect(config.chatId).toBe("42");
+  });
+
+  it("defaults chatId to empty string when LUNA_CHAT_ID is absent", () => {
+    const config = validateEnv({
+      LUNA_API_URL: "http://localhost:8080",
+      LUNA_API_SECRET: "my-secret",
+    });
+    expect(config.chatId).toBe("");
+  });
 });
