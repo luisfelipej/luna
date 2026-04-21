@@ -11,6 +11,43 @@ export interface SessionRow {
   last_used_at: string; // ISO 8601
 }
 
+export interface WorkspaceRow {
+  chat_id: number;
+  path: string;
+  added_at: string; // ISO 8601
+  last_used_at: string | null; // ISO 8601
+}
+
+export interface SettingsEntry {
+  key: string;
+  value: string;
+}
+
+export interface WebhookEndpoint {
+  name: string;
+  enabled: boolean;
+  last_event_at: string | null; // ISO 8601
+}
+
+export interface WebhookStatus {
+  running: boolean;
+  port: number | null;
+  endpoints: WebhookEndpoint[];
+}
+
+export interface JobRow {
+  id: number;
+  chat_id: number;
+  name: string;
+  job_type: string;
+  prompt: string;
+  schedule: unknown;
+  active: boolean;
+  auto_remove: boolean;
+  fired_at: string | null; // ISO 8601
+  created_at: string; // ISO 8601
+}
+
 export interface ApiClientOptions {
   /** Base URL for the Luna server, e.g. "http://localhost:8080" */
   baseUrl: string;
@@ -20,6 +57,10 @@ export interface ApiClientOptions {
 
 export interface ApiClient {
   fetchSessions(): Promise<SessionRow[]>;
+  fetchWorkspaces(): Promise<WorkspaceRow[]>;
+  fetchSettings(): Promise<SettingsEntry[]>;
+  fetchWebhookStatus(): Promise<WebhookStatus>;
+  fetchJobs(): Promise<JobRow[]>;
 }
 
 export function createApiClient(opts: ApiClientOptions): ApiClient {
@@ -41,6 +82,26 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
     async fetchSessions(): Promise<SessionRow[]> {
       const data = await apiFetch("/api/sessions");
       return data as SessionRow[];
+    },
+
+    async fetchWorkspaces(): Promise<WorkspaceRow[]> {
+      const data = await apiFetch("/api/workspaces");
+      return data as WorkspaceRow[];
+    },
+
+    async fetchSettings(): Promise<SettingsEntry[]> {
+      const data = await apiFetch("/api/settings");
+      return data as SettingsEntry[];
+    },
+
+    async fetchWebhookStatus(): Promise<WebhookStatus> {
+      const data = await apiFetch("/api/webhook-status");
+      return data as WebhookStatus;
+    },
+
+    async fetchJobs(): Promise<JobRow[]> {
+      const data = await apiFetch("/api/jobs");
+      return data as JobRow[];
     },
   };
 }
