@@ -46,8 +46,11 @@ export class PooledClaudeBackend implements AgentBackendPort {
     signal: AbortSignal,
   ): AsyncIterable<StreamChunk> {
     const cwd = await this.deps.resolveCwd(chatId);
-    // Ensure the entry under the per-chat lock so spawn/evict cannot race.
-    const entry = await this.deps.locks.withLock(chatId, () => this.deps.pool.ensure(chatId, cwd));
+    // NOTE: the caller (SendMessageToAgent) already holds the per-chat lock.
+    // Taking it again here would deadlock (AsyncMutex is non-reentrant).
+    // restart()/changeWorkspace() are NOT called under SendMessageToAgent's
+    // lock, so they still take it themselves.
+    const entry = await this.deps.pool.ensure(chatId, cwd);
     this.deps.pool.markBusy(chatId);
     try {
       for await (const chunk of this.deps.stream(entry, text, cfg, signal)) {
