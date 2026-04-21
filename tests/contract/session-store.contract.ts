@@ -87,5 +87,23 @@ export function sessionStoreContract(
       await s.clear(4);
       expect(await s.get(4)).toBeNull();
     });
+
+    test("listAll returns all upserted rows", async () => {
+      const s = await makeStore();
+      const t0 = new Date("2025-01-01T00:00:00Z");
+      const t1 = new Date("2025-01-02T00:00:00Z");
+      await s.upsert({ chatId: 10, sessionId: "a", model: "sonnet", totalCostUsd: 1, lastUsedAt: t0 });
+      await s.upsert({ chatId: 20, sessionId: "b", model: "opus", totalCostUsd: 2, lastUsedAt: t1 });
+      const all = await s.listAll();
+      expect(all.length).toBe(2);
+      const chatIds = all.map((r) => r.chatId).sort();
+      expect(chatIds).toEqual([10, 20]);
+    });
+
+    test("listAll returns empty array when no rows", async () => {
+      const s = await makeStore();
+      const all = await s.listAll();
+      expect(all).toEqual([]);
+    });
   });
 }

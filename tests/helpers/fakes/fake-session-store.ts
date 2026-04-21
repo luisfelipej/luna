@@ -24,4 +24,8 @@ export class FakeSessionStore implements SessionStore {
     if (!row) return;
     this.rows.set(chatId, { ...row, totalCostUsd: row.totalCostUsd + delta });
   }
+
+  async listAll(): Promise<SessionRow[]> {
+    return [...this.rows.values()];
+  }
 }

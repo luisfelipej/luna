@@ -20,4 +20,6 @@ export interface SessionStore {
   upsert(row: SessionRow): Promise<void>;
   clear(chatId: number): Promise<void>;
   addCost(chatId: number, delta: number): Promise<void>;
+  /** Returns all session rows across all chats. Used by GET /api/sessions. */
+  listAll(): Promise<SessionRow[]>;
 }
