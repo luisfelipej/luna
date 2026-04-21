@@ -86,15 +86,18 @@ export class ClaudeCodeBackend implements AgentBackendPort {
     void this.drainStderr(chatId, proc);
 
     const parser = createStreamJsonParser();
+    let accText = "";
     try {
       for await (const bytes of proc.stdout) {
         const frames = parser.feed(bytes);
-        for (const chunk of framesToChunks(frames)) {
+        for (const chunk of framesToChunks(frames, accText)) {
+          accText = chunk.textSoFar;
           yield chunk;
         }
       }
       const tailFrames: ParsedFrame[] = parser.flush();
-      for (const chunk of framesToChunks(tailFrames)) {
+      for (const chunk of framesToChunks(tailFrames, accText)) {
+        accText = chunk.textSoFar;
         yield chunk;
       }
     } finally {
@@ -109,7 +112,17 @@ export class ClaudeCodeBackend implements AgentBackendPort {
   }
 
   private buildArgs(cfg: BackendConfig, resume: string | null): string[] {
-    const args = ["--output-format", "stream-json", "--input-format", "stream-json"];
+    // Claude Code requires --print for non-interactive mode and --verbose
+    // when --input-format=stream-json. Without these flags the CLI enters
+    // the interactive TUI and never consumes stdin → no reply.
+    const args = [
+      "--print",
+      "--verbose",
+      "--output-format",
+      "stream-json",
+      "--input-format",
+      "stream-json",
+    ];
     args.push("--model", cfg.model);
     if (resume) args.push("--resume", resume);
     for (const extra of this.extraArgs) args.push(extra);
