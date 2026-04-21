@@ -44,5 +44,16 @@ export function allowedWorkspaceStoreContract(
       const rows = await s.list(5);
       expect(rows).toHaveLength(1);
     });
+
+    test("listAll() returns all rows across all chat IDs", async () => {
+      const s = await makeStore();
+      const now = new Date("2025-01-01T00:00:00Z");
+      await s.add(10, "/w/alpha", now);
+      await s.add(20, "/w/beta", now);
+      await s.add(10, "/w/gamma", now);
+      const all = await s.listAll();
+      const paths = all.map((w) => w.path).sort();
+      expect(paths).toEqual(["/w/alpha", "/w/beta", "/w/gamma"].sort());
+    });
   });
 }

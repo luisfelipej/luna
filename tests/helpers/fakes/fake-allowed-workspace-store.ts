@@ -25,4 +25,8 @@ export class FakeAllowedWorkspaceStore implements AllowedWorkspaceStore {
     if (!row) return;
     this.rows.set(this.key(chatId, path), { ...row, lastUsedAt: now });
   }
+
+  async listAll(): Promise<Workspace[]> {
+    return [...this.rows.values()];
+  }
 }

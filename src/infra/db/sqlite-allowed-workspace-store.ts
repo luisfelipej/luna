@@ -50,6 +50,11 @@ export class SqliteAllowedWorkspaceStore implements AllowedWorkspaceStore {
       .run(now.toISOString(), chatId, path);
   }
 
+  async listAll(): Promise<Workspace[]> {
+    const rows = this.db.$raw.prepare("SELECT * FROM workspaces ORDER BY added_at").all() as Row[];
+    return rows.map((r) => this.toPort(r));
+  }
+
   private toPort(r: Row): Workspace {
     return {
       chatId: r.chat_id,
