@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { Database } from "bun:sqlite";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
@@ -22,6 +24,9 @@ export interface LunaDb extends BunSQLiteDatabase<typeof schema> {
  * behavioural tests don't diverge — SQLite silently no-ops on memory DBs.
  */
 export function openDb(url: string): LunaDb {
+  if (url !== ":memory:" && !url.startsWith("file::memory:")) {
+    mkdirSync(dirname(url), { recursive: true });
+  }
   const raw = new Database(url);
   raw.exec("PRAGMA journal_mode = WAL");
   raw.exec("PRAGMA busy_timeout = 5000");
