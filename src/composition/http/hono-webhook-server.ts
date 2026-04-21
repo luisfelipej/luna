@@ -335,7 +335,9 @@ export class HonoWebhookServer implements WebhookServerPort {
       return c.body(null, 202);
     });
 
-    mountMonitoringRoutes(api, { sessionStore: o.sessionStore });
+    mountMonitoringRoutes(api, {
+      ...(o.sessionStore !== undefined ? { sessionStore: o.sessionStore } : {}),
+    });
 
     app.route("/api", api);
     return app;

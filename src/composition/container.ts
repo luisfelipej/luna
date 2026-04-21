@@ -252,5 +252,8 @@ function tracerSessionStore(): SessionStore {
       if (!r) return;
       rows.set(chatId, { ...r, totalCostUsd: r.totalCostUsd + delta });
     },
+    async listAll() {
+      return [...rows.values()];
+    },
   };
 }

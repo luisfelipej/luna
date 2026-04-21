@@ -22,6 +22,9 @@ describe("port interfaces compile and fakes are structurally assignable", () => 
       async upsert() {},
       async clear() {},
       async addCost() {},
+      async listAll() {
+        return [];
+      },
     };
     expect(typeof s.get).toBe("function");
   });
