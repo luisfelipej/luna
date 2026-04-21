@@ -44,9 +44,7 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
   const dataDir = mkdtempSync(join(tmpdir(), "luna-integ-"));
   const transport = new FakeTelegramTransport();
   const spawn = new FakeSpawn();
-  const agent = new FakeAgentBackend(
-    opts.agentScript ? { script: opts.agentScript } : {},
-  );
+  const agent = new FakeAgentBackend(opts.agentScript ? { script: opts.agentScript } : {});
   const adminChatId = opts.adminChatId ?? 42;
   const githubSecret = opts.githubSecret ?? "gh-secret";
   const apiSecret = opts.apiSecret ?? "api-secret";

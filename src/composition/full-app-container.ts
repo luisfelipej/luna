@@ -11,6 +11,7 @@ import { WorkspacesRepo } from "../infra/config/workspaces-repo.ts";
 import { UndiciServiceProxy } from "../infra/proxy/undici-service-proxy.ts";
 import type { LunaDb } from "../infra/db/client.ts";
 import type { SpawnPort } from "../infra/backends/spawn-port.ts";
+import type { AgentBackendPort } from "../adapters/ports/agent-backend.port.ts";
 import { HonoWebhookServer } from "./http/hono-webhook-server.ts";
 import {
   GrammyTelegramTransport,
@@ -75,7 +76,7 @@ export interface BuildFullAppContainerOptions {
    * instead of the pooled ClaudeCodeBackend. Bypasses the real pool to avoid
    * re-entrant per-chat locks under `bun:test`.
    */
-  readonly agentBackendOverride?: import("../adapters/ports/agent-backend.port.ts").AgentBackendPort;
+  readonly agentBackendOverride?: AgentBackendPort;
   /** Explicit YAML path (null = skip, use empty repos). */
   readonly usersYamlPath?: string | null;
   readonly workspacesYamlPath?: string | null;
