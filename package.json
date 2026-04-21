@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "bun run src/app/main.ts",
     "start": "bun run src/app/main.ts",
+    "tui": "bun run tui/main.tsx",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -34,6 +35,9 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/bun": "latest",
+    "@types/react": "^18.3.1",
+    "ink": "^4.4.1",
+    "react": "^18.3.1",
     "@typescript-eslint/parser": "^8",
     "drizzle-kit": "^0.28",
     "drizzle-orm": "^0.45.2",
