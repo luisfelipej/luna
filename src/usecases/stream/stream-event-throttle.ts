@@ -41,11 +41,18 @@ export function makeStreamEventThrottle(opts: StreamEventThrottleOptions) {
 
     for await (const chunk of stream) {
       if (!seenAny) {
-        // First chunk — anchor the message.
+        // Wait to anchor until we actually have text. Tool-use-only preamble
+        // chunks carry an empty textSoFar and would cause Telegram to reject
+        // the message with 400 "message text is empty".
+        if (chunk.textSoFar === "" && !chunk.done) continue;
+        // Terminal-with-empty-text: still surface a placeholder so the user
+        // knows the turn ended (Claude sometimes ends turns with only tool
+        // narration and no final text).
+        const firstText = chunk.textSoFar === "" ? "(no response)" : chunk.textSoFar;
         seenAny = true;
-        await opts.emit({ kind: "send", text: chunk.textSoFar });
+        await opts.emit({ kind: "send", text: firstText });
         lastEmitMs = opts.clock.nowMs();
-        lastEmittedText = chunk.textSoFar;
+        lastEmittedText = firstText;
         if (chunk.done) return;
         continue;
       }
