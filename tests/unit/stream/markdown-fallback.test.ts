@@ -5,25 +5,14 @@ import {
 } from "../../../src/usecases/stream/markdown-fallback.ts";
 
 describe("sendWithMarkdownFallback", () => {
-  it("returns the markdown path when no error", async () => {
+  it("sends with plain text (markdown disabled by default in M1)", async () => {
     const calls: Array<{ markdown: boolean }> = [];
     const out = await sendWithMarkdownFallback(async (opts) => {
       calls.push(opts);
       return 42;
     });
     expect(out).toBe(42);
-    expect(calls).toEqual([{ markdown: true }]);
-  });
-
-  it("retries plain text when markdown raises a parse error", async () => {
-    const calls: Array<{ markdown: boolean }> = [];
-    const out = await sendWithMarkdownFallback(async (opts) => {
-      calls.push(opts);
-      if (opts.markdown) throw new Error("Bad Request: can't parse entities: Character '_'");
-      return "ok-plain";
-    });
-    expect(out).toBe("ok-plain");
-    expect(calls).toEqual([{ markdown: true }, { markdown: false }]);
+    expect(calls).toEqual([{ markdown: false }]);
   });
 
   it("rethrows non-parse errors without retry", async () => {

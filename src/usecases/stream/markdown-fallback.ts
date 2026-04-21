@@ -39,10 +39,8 @@ export async function sendWithMarkdownFallback<R>(
   fn: SendFn<R>,
   opts: MarkdownFallbackOptions = { isParseError: defaultIsParseError },
 ): Promise<R> {
-  try {
-    return await fn({ markdown: true });
-  } catch (err) {
-    if (!opts.isParseError(err)) throw err;
-    return fn({ markdown: false });
-  }
+  // Claude's output is not MarkdownV2-safe by contract — dots, dashes, and
+  // parens would need escaping. Default to plain text; callers that know
+  // their content is safe can opt in by calling the transport directly.
+  return fn({ markdown: false });
 }
