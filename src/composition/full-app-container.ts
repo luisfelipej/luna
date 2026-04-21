@@ -39,10 +39,7 @@ import { spawn as childSpawn } from "node:child_process";
 import { LoopScheduler } from "./scheduler/loop-scheduler.ts";
 import { buildClaudeAgentBackend } from "./claude-backend-container.ts";
 import { buildStoresContainer, storesOptionsFromEnv } from "./container.ts";
-import {
-  buildRefreshableSnapshotResolver,
-  type EnvReader,
-} from "./snapshot-config-resolver.ts";
+import { buildRefreshableSnapshotResolver, type EnvReader } from "./snapshot-config-resolver.ts";
 import { TelegramPresenter } from "./telegram-presenter.ts";
 import type { WebhookStatusProvider } from "../usecases/telegram/views.ts";
 
@@ -133,8 +130,7 @@ export async function buildFullAppContainer(
       : new WorkspacesRepo("workspaces: []");
 
   // Service proxy (Phase 9): wire only when services.yaml is present.
-  const serviceProxy =
-    opts.serviceProxy ?? buildServiceProxy(env, opts.servicesYamlPath);
+  const serviceProxy = opts.serviceProxy ?? buildServiceProxy(env, opts.servicesYamlPath);
 
   const envReader = env as unknown as EnvReader;
   const { resolver, refresh } = await buildRefreshableSnapshotResolver({
@@ -281,6 +277,8 @@ export async function buildFullAppContainer(
     fsPort,
     workspaceBase,
     allowedWorkspaceStore: stores.allowedWorkspaceStore,
+    sessionStore: stores.sessionStore,
+    settingsStore: stores.settingsStore,
   });
 
   const defaultWebhookStatus: WebhookStatusProvider = {
@@ -414,8 +412,7 @@ function parseAllowList(raw: string): number[] {
     .filter((s) => s.length > 0)
     .map((s) => {
       const n = Number(s);
-      if (!Number.isInteger(n))
-        throw new Error(`invalid TELEGRAM_ALLOWED_IDS entry: ${s}`);
+      if (!Number.isInteger(n)) throw new Error(`invalid TELEGRAM_ALLOWED_IDS entry: ${s}`);
       return n;
     });
 }

@@ -8,6 +8,8 @@ import type { ServiceProxyPort } from "../../src/adapters/ports/service-proxy.po
 import { FakeJobStore } from "../helpers/fakes/fake-job-store.ts";
 import { FakeTelegramTransport } from "../helpers/fakes/fake-telegram-transport.ts";
 import { FakeSessionStore } from "../helpers/fakes/fake-session-store.ts";
+import { FakeAllowedWorkspaceStore } from "../helpers/fakes/fake-allowed-workspace-store.ts";
+import { FakeSettingsStore } from "../helpers/fakes/fake-settings-store.ts";
 
 const GH_SECRET = "gh-s3cr3t";
 const GEN_SECRET = "gen-s3cr3t";
@@ -32,6 +34,8 @@ async function makeFixture(
     apiSecret?: string | undefined;
     serviceProxy?: ServiceProxyPort;
     sessionStore?: FakeSessionStore;
+    allowedWorkspaceStore?: FakeAllowedWorkspaceStore;
+    settingsStore?: FakeSettingsStore;
   } = {},
 ): Promise<Fixture> {
   const transport = new FakeTelegramTransport();
@@ -50,6 +54,8 @@ async function makeFixture(
     jobStore,
     ...(opts.serviceProxy ? { serviceProxy: opts.serviceProxy } : {}),
     ...(opts.sessionStore ? { sessionStore: opts.sessionStore } : {}),
+    ...(opts.allowedWorkspaceStore ? { allowedWorkspaceStore: opts.allowedWorkspaceStore } : {}),
+    ...(opts.settingsStore ? { settingsStore: opts.settingsStore } : {}),
   });
   await server.start(0); // ephemeral port
   const { port } = server.status();
@@ -481,6 +487,124 @@ describe("HonoWebhookServer — live Bun.serve", () => {
       expect(body[0]?.chat_id).toBe(42);
       expect(body[0]?.session_id).toBe("sid-x");
       expect(body[0]?.model).toBe("sonnet");
+    });
+  });
+
+  describe("GET /api/workspaces", () => {
+    it("returns non-500 when allowedWorkspaceStore is injected (tracer)", async () => {
+      fx = await makeFixture({ allowedWorkspaceStore: new FakeAllowedWorkspaceStore() });
+      const r = await fetch(`${fx.baseUrl}/api/workspaces`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).not.toBe(500);
+    });
+
+    it("returns 501 when allowedWorkspaceStore is not injected", async () => {
+      fx = await makeFixture();
+      const r = await fetch(`${fx.baseUrl}/api/workspaces`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(501);
+    });
+
+    it("returns empty array when no workspaces exist", async () => {
+      fx = await makeFixture({ allowedWorkspaceStore: new FakeAllowedWorkspaceStore() });
+      const r = await fetch(`${fx.baseUrl}/api/workspaces`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(Array.isArray(body)).toBe(true);
+      expect((body as unknown[]).length).toBe(0);
+    });
+
+    it("returns workspace rows as JSON array", async () => {
+      const allowedWorkspaceStore = new FakeAllowedWorkspaceStore();
+      await allowedWorkspaceStore.add(10, "/workspaces/alpha", new Date("2025-01-01T00:00:00Z"));
+      await allowedWorkspaceStore.add(20, "/workspaces/beta", new Date("2025-01-02T00:00:00Z"));
+      fx = await makeFixture({ allowedWorkspaceStore });
+      const r = await fetch(`${fx.baseUrl}/api/workspaces`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as Array<Record<string, unknown>>;
+      expect(body.length).toBe(2);
+      const paths = body.map((w) => w.path).sort();
+      expect(paths).toEqual(["/workspaces/alpha", "/workspaces/beta"]);
+    });
+  });
+
+  describe("GET /api/settings", () => {
+    it("returns non-500 when settingsStore is injected (tracer)", async () => {
+      fx = await makeFixture({ settingsStore: new FakeSettingsStore() });
+      const r = await fetch(`${fx.baseUrl}/api/settings`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).not.toBe(500);
+    });
+
+    it("returns 501 when settingsStore is not injected", async () => {
+      fx = await makeFixture();
+      const r = await fetch(`${fx.baseUrl}/api/settings`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(501);
+    });
+
+    it("returns empty array when no settings exist", async () => {
+      fx = await makeFixture({ settingsStore: new FakeSettingsStore() });
+      const r = await fetch(`${fx.baseUrl}/api/settings`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(Array.isArray(body)).toBe(true);
+    });
+
+    it("returns settings entries as key-value array", async () => {
+      const settingsStore = new FakeSettingsStore();
+      await settingsStore.set("model:42", "opus");
+      await settingsStore.set("timeout_s:42", "120");
+      fx = await makeFixture({ settingsStore });
+      const r = await fetch(`${fx.baseUrl}/api/settings`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as Array<Record<string, unknown>>;
+      expect(body.length).toBe(2);
+      const keys = body.map((e) => e.key).sort();
+      expect(keys).toEqual(["model:42", "timeout_s:42"]);
+    });
+  });
+
+  describe("GET /api/webhook-status", () => {
+    it("returns running status and endpoints list", async () => {
+      fx = await makeFixture();
+      const r = await fetch(`${fx.baseUrl}/api/webhook-status`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as Record<string, unknown>;
+      expect(typeof body.running).toBe("boolean");
+      expect(Array.isArray(body.endpoints)).toBe(true);
+    });
+
+    it("returns 401 when no bearer token", async () => {
+      fx = await makeFixture();
+      const r = await fetch(`${fx.baseUrl}/api/webhook-status`);
+      expect(r.status).toBe(401);
+    });
+
+    it("shows endpoint names and enabled flags", async () => {
+      fx = await makeFixture();
+      const r = await fetch(`${fx.baseUrl}/api/webhook-status`, {
+        headers: { authorization: `Bearer ${API_SECRET}` },
+      });
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as { endpoints: Array<{ name: string; enabled: boolean }> };
+      const names = body.endpoints.map((e) => e.name).sort();
+      expect(names).toEqual(["/webhook", "/webhook/github"]);
+      expect(body.endpoints.every((e) => typeof e.enabled === "boolean")).toBe(true);
     });
   });
 });

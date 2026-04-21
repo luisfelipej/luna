@@ -9,6 +9,7 @@ import type {
 import type { FsPort } from "../../adapters/ports/fs.port.ts";
 import type { AllowedWorkspaceStore } from "../../adapters/ports/allowed-workspace-store.port.ts";
 import type { SessionStore } from "../../adapters/ports/session-store.port.ts";
+import type { SettingsStore } from "../../adapters/ports/settings-store.port.ts";
 import type { Schedule } from "../../entities/job.ts";
 import { mountMonitoringRoutes } from "./api-monitoring-routes.ts";
 import { assertConfined } from "../../usecases/workspace/assert-confined.ts";
@@ -45,6 +46,8 @@ export interface HonoWebhookServerOptions {
   readonly allowedWorkspaceStore?: AllowedWorkspaceStore;
   /** Optional session store — feeds GET /api/sessions monitoring endpoint. */
   readonly sessionStore?: SessionStore;
+  /** Optional settings store — feeds GET /api/settings monitoring endpoint. */
+  readonly settingsStore?: SettingsStore;
 }
 
 interface EndpointStat {
@@ -337,6 +340,11 @@ export class HonoWebhookServer implements WebhookServerPort {
 
     mountMonitoringRoutes(api, {
       ...(o.sessionStore !== undefined ? { sessionStore: o.sessionStore } : {}),
+      ...(o.allowedWorkspaceStore !== undefined
+        ? { allowedWorkspaceStore: o.allowedWorkspaceStore }
+        : {}),
+      ...(o.settingsStore !== undefined ? { settingsStore: o.settingsStore } : {}),
+      getWebhookStatus: () => this.status(),
     });
 
     app.route("/api", api);
