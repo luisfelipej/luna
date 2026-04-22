@@ -52,6 +52,15 @@ export class SqliteSessionStore implements SessionStore {
       .run(delta, chatId);
   }
 
+  async listAll(): Promise<SessionRow[]> {
+    const rows = this.db.$raw
+      .prepare(
+        "SELECT chat_id, session_id, model, total_cost_usd, last_used_at FROM sessions ORDER BY last_used_at DESC",
+      )
+      .all() as Row[];
+    return rows.map((r) => this.toPort(r));
+  }
+
   private toPort(r: Row): SessionRow {
     return {
       chatId: r.chat_id,

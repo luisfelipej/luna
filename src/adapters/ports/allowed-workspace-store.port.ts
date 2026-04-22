@@ -10,4 +10,6 @@ export interface AllowedWorkspaceStore {
   add(chatId: number, path: string, now: Date): Promise<void>;
   remove(chatId: number, path: string): Promise<void>;
   touch(chatId: number, path: string, now: Date): Promise<void>;
+  /** Returns all workspace rows across all chat IDs. Used by GET /api/workspaces. */
+  listAll(): Promise<Workspace[]>;
 }

@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "bun run src/app/main.ts",
     "start": "bun run src/app/main.ts",
+    "tui": "bun run tui/main.tsx",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -33,7 +34,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@testing-library/react": "^16.3.2",
     "@types/bun": "latest",
+    "@types/react": "^18.3.1",
     "@typescript-eslint/parser": "^8",
     "drizzle-kit": "^0.28",
     "drizzle-orm": "^0.45.2",
@@ -41,6 +44,8 @@
     "eslint-import-resolver-typescript": "^3",
     "eslint-plugin-boundaries": "^5",
     "eslint-plugin-import": "^2",
+    "ink": "^4.4.1",
+    "react": "^18.3.1",
     "typescript": "^5.6.0"
   }
 }

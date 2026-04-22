@@ -183,6 +183,54 @@ See `.env.example` for grouped, commented versions.
 | `POST /api/service/:name` | Bearer | Proxy to a `services.yaml` entry. |
 | `POST /api/send-message` | Bearer | Proactive Telegram send. |
 | `POST /api/send-file` | Bearer | Proactive file send (realpath-confined to `WORKSPACE_BASE` + allow-list). |
+| `GET /api/sessions` | Bearer | All per-chat session rows (model, cost, lastUsedAt). |
+| `GET /api/workspaces` | Bearer | All allowed workspace rows across all chats. |
+| `GET /api/settings` | Bearer | All settings key-value entries (model overrides, timeouts, budgets). |
+| `GET /api/webhook-status` | Bearer | Webhook server running state + per-endpoint enabled + lastEventAt. |
+
+## TUI — Operator Monitoring Dashboard
+
+Luna includes a read-only terminal dashboard (`bun run tui`) that polls the monitoring API and renders live status in your terminal.
+
+### Requirements
+
+- Bun ≥ 1.1
+- Luna server running with `GENERIC_WEBHOOK_SECRET` set (enables bearer auth)
+- Terminal with color support
+
+### Usage
+
+```bash
+# Start the dashboard (in a separate terminal from the server)
+LUNA_API_URL=http://localhost:8080 \
+LUNA_API_SECRET=<same-as-GENERIC_WEBHOOK_SECRET> \
+bun run tui
+```
+
+Press **q** or **Ctrl+C** to exit cleanly.
+
+### TUI Environment Variables
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `LUNA_API_URL` | yes | — | Luna server base URL, e.g. `http://localhost:8080` |
+| `LUNA_API_SECRET` | yes | — | Bearer token — same value as `GENERIC_WEBHOOK_SECRET` on the server |
+| `TUI_POLL_MS` | no | 2000 | Polling interval in milliseconds |
+| `DATA_DIR` | no | cwd | Path to Luna data directory (used by Log panel for JSONL tail) |
+| `LUNA_CHAT_ID` | no | — | Chat ID for the Agent Log panel (enables per-chat JSONL tail) |
+
+### Panels
+
+| Panel | Data Source | Shows |
+|---|---|---|
+| **Jobs** | `GET /api/jobs` | Scheduled jobs — ID, name, chat, status, last fire time |
+| **Sessions** | `GET /api/sessions` | Per-chat session rows — model, cost (4dp), last used |
+| **Settings** | `GET /api/settings` | All key-value setting overrides (model, timeout, budget, context window) |
+| **Agent Log** | `DATA_DIR/history/YYYY-MM-DD.jsonl` | Last 20 lines of today's JSONL log; handles midnight UTC rotation |
+| **Webhooks** | `GET /api/webhook-status` | Endpoint enable/disable state + last event timestamp |
+| **Workspaces** | `GET /api/workspaces` | Allowed workspace paths per chat |
+
+Each panel polls independently — one failing endpoint doesn't affect others. On error, panels show the last known data with an error badge in the header.
 
 ## Differences from Kai (M1 Scope)
 
