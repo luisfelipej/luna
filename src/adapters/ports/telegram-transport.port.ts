@@ -2,10 +2,12 @@ import type { TelegramUpdate } from "../../entities/telegram-update.ts";
 
 export interface SendMessageOpts {
   readonly markdown?: boolean;
+  readonly html?: boolean;
 }
 
 export interface EditMessageOpts {
   readonly markdown?: boolean;
+  readonly html?: boolean;
 }
 
 export type TelegramUpdateHandler = (update: TelegramUpdate) => Promise<void>;
