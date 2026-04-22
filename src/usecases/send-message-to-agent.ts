@@ -100,23 +100,23 @@ export function makeSendMessageToAgent(deps: SendMessageToAgentDeps) {
 
       const emit = async (e: ThrottleEmit): Promise<void> => {
         if (e.kind === "send") {
-          messageId = await sendWithMarkdownFallback(({ markdown }) =>
-            deps.telegram.sendMessage(chatId, e.text, { markdown }),
+          messageId = await sendWithMarkdownFallback(e.text, ({ html, body }) =>
+            deps.telegram.sendMessage(chatId, body, { html }),
           );
           lastText = e.text;
           return;
         }
         if (messageId === null) {
           // Defensive: throttle contract always sends before edits.
-          messageId = await sendWithMarkdownFallback(({ markdown }) =>
-            deps.telegram.sendMessage(chatId, e.text, { markdown }),
+          messageId = await sendWithMarkdownFallback(e.text, ({ html, body }) =>
+            deps.telegram.sendMessage(chatId, body, { html }),
           );
           lastText = e.text;
           return;
         }
         const mid = messageId;
-        await sendWithMarkdownFallback<void>(({ markdown }) =>
-          deps.telegram.editMessage(chatId, mid, e.text, { markdown }),
+        await sendWithMarkdownFallback<void>(e.text, ({ html, body }) =>
+          deps.telegram.editMessage(chatId, mid, body, { html }),
         );
         lastText = e.text;
       };

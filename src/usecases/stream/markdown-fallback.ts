@@ -1,25 +1,33 @@
 /**
- * Retry helper for Telegram Markdown parse failures.
+ * Retry helper for Telegram HTML parse failures.
  *
- * Spec #42: when an edit/send with `parse_mode=MarkdownV2` is rejected by
- * Telegram (typically because the text contains unescaped `_*[]()~` etc.),
- * the transport must retry the same call with `markdown: false` (plain text)
- * so the user still sees the reply, even if the formatting is dropped.
+ * Primary path: convert rawText GFM → Telegram HTML, send with html: true.
+ * Fallback: on Telegram parse error, retry with html: false, body = rawText
+ * (plain text — always accepted by Telegram).
  *
- * Pure usecase — takes two thunks and a `looksLikeMarkdownParseError`
- * predicate. The presenter passes in the real grammY-backed send/edit.
+ * Pure usecase — no I/O, no timers, no fs. The converter and transport
+ * callbacks are injected via the function arguments.
  */
 
-export type SendFn<R> = (opts: { markdown: boolean }) => Promise<R>;
+import { gfmToTelegramHtml } from "./gfm-to-telegram-html.ts";
+
+/** Options passed to the send/edit closure. */
+export type SendFnOpts = { readonly html: boolean; readonly body: string };
+
+/**
+ * Closure that performs the actual Telegram send or edit.
+ * Receives the final body text and html flag.
+ */
+export type SendFn<R> = (opts: SendFnOpts) => Promise<R>;
 
 export interface MarkdownFallbackOptions {
   readonly isParseError: (err: unknown) => boolean;
 }
 
 /**
- * Default heuristic for "Telegram rejected MarkdownV2". Matches the most
- * common grammY error phrasings: `can't parse entities`, `MARKDOWN`, 400
- * Bad Request with a parse_mode clue.
+ * Default heuristic for "Telegram rejected HTML entity parsing". Matches the
+ * most common grammY error phrasings: `can't parse entities`, `MARKDOWN`,
+ * 400 Bad Request with a parse_mode clue.
  */
 export function defaultIsParseError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -32,15 +40,23 @@ export function defaultIsParseError(err: unknown): boolean {
 }
 
 /**
- * Runs `fn({markdown: true})`; on parse error, retries with `markdown: false`.
- * Any other error (network, 5xx, auth) is rethrown.
+ * Convert `rawText` GFM → Telegram HTML, then call `fn({html: true, body: htmlBody})`.
+ * On Telegram parse error, retries with `fn({html: false, body: rawText})`.
+ *
+ * Any non-parse error (network, 5xx, auth) is rethrown immediately.
  */
 export async function sendWithMarkdownFallback<R>(
+  rawText: string,
   fn: SendFn<R>,
   opts: MarkdownFallbackOptions = { isParseError: defaultIsParseError },
 ): Promise<R> {
-  // Claude's output is not MarkdownV2-safe by contract — dots, dashes, and
-  // parens would need escaping. Default to plain text; callers that know
-  // their content is safe can opt in by calling the transport directly.
-  return fn({ markdown: false });
+  const htmlBody = gfmToTelegramHtml(rawText);
+  try {
+    return await fn({ html: true, body: htmlBody });
+  } catch (err) {
+    if (opts.isParseError(err)) {
+      return fn({ html: false, body: rawText });
+    }
+    throw err;
+  }
 }

@@ -131,16 +131,18 @@ export class GrammyTelegramTransport implements TelegramTransport {
   async sendMessage(chatId: number, text: string, opts?: SendMessageOpts): Promise<number> {
     const body = this.clamp(text, { kind: "send", chatId });
     const wantMarkdown = opts?.markdown === true;
+    const wantHtml = opts?.html === true;
     try {
+      const parseMode = wantMarkdown ? "MarkdownV2" : wantHtml ? "HTML" : undefined;
       const res = await this.bot.api.sendMessage(
         chatId,
         body,
-        wantMarkdown ? { parse_mode: "MarkdownV2" } : undefined,
+        parseMode !== undefined ? { parse_mode: parseMode } : undefined,
       );
       return res.message_id;
     } catch (err) {
-      if (wantMarkdown && isParseError(err)) {
-        this.logger?.warn("telegram: markdown parse failed, retrying plain", { chatId });
+      if ((wantMarkdown || wantHtml) && isParseError(err)) {
+        this.logger?.warn("telegram: parse failed, retrying plain", { chatId });
         const res = await this.bot.api.sendMessage(chatId, body);
         return res.message_id;
       }
@@ -156,16 +158,18 @@ export class GrammyTelegramTransport implements TelegramTransport {
   ): Promise<void> {
     const body = this.clamp(text, { kind: "edit", chatId, messageId });
     const wantMarkdown = opts?.markdown === true;
+    const wantHtml = opts?.html === true;
     try {
+      const parseMode = wantMarkdown ? "MarkdownV2" : wantHtml ? "HTML" : undefined;
       await this.bot.api.editMessageText(
         chatId,
         messageId,
         body,
-        wantMarkdown ? { parse_mode: "MarkdownV2" } : undefined,
+        parseMode !== undefined ? { parse_mode: parseMode } : undefined,
       );
     } catch (err) {
-      if (wantMarkdown && isParseError(err)) {
-        this.logger?.warn("telegram: markdown parse failed on edit, retrying plain", {
+      if ((wantMarkdown || wantHtml) && isParseError(err)) {
+        this.logger?.warn("telegram: parse failed on edit, retrying plain", {
           chatId,
           messageId,
         });
