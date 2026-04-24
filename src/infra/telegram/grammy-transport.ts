@@ -142,7 +142,12 @@ export class GrammyTelegramTransport implements TelegramTransport {
       return res.message_id;
     } catch (err) {
       if ((wantMarkdown || wantHtml) && isParseError(err)) {
-        this.logger?.warn("telegram: parse failed, retrying plain", { chatId });
+        this.logger?.warn("telegram: parse failed, retrying plain", {
+          chatId,
+          parseMode: wantHtml ? "HTML" : "MarkdownV2",
+          err: err instanceof Error ? err.message : String(err),
+          snippet: body.slice(0, 300),
+        });
         const res = await this.bot.api.sendMessage(chatId, body);
         return res.message_id;
       }
@@ -172,6 +177,9 @@ export class GrammyTelegramTransport implements TelegramTransport {
         this.logger?.warn("telegram: parse failed on edit, retrying plain", {
           chatId,
           messageId,
+          parseMode: wantHtml ? "HTML" : "MarkdownV2",
+          err: err instanceof Error ? err.message : String(err),
+          snippet: body.slice(0, 300),
         });
         await this.bot.api.editMessageText(chatId, messageId, body);
         return;
