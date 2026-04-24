@@ -8,7 +8,7 @@
  * The Marked instance is created once (module scope) to avoid setup cost.
  */
 
-import { type RendererObject, type Tokens, Marked } from "marked";
+import { type RendererObject, type Tokens, Marked, type Token } from "marked";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -16,7 +16,10 @@ import { type RendererObject, type Tokens, Marked } from "marked";
 
 /** Escape the three chars that break Telegram HTML entity parsing. */
 export function escapeHtml(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +86,11 @@ function buildMarked(): Marked {
         .join(" | ");
 
       const bodyRows = token.rows
-        .map((row) => row.map((cell) => String(this.parser.parseInline(cell.tokens))).join(" | "))
+        .map((row) =>
+          row
+            .map((cell) => String(this.parser.parseInline(cell.tokens)))
+            .join(" | "),
+        )
         .join("\n");
 
       const rawTable = `${headerCells}\n${separator}\n${bodyRows}`;
@@ -94,7 +101,8 @@ function buildMarked(): Marked {
     list(token: Tokens.List): string {
       const items: string[] = [];
       // `start` can be `""` (falsy) when unordered — treat as 1 for ordered.
-      let counter: number = typeof token.start === "number" && token.start > 0 ? token.start : 1;
+      let counter: number =
+        typeof token.start === "number" && token.start > 0 ? token.start : 1;
 
       for (const item of token.items) {
         // The first token of a list item is usually a "text" token or "paragraph".
@@ -119,6 +127,33 @@ function buildMarked(): Marked {
     // Strip paragraph <p> tags — Telegram does not support them ───────────────
     paragraph(token: Tokens.Paragraph): string {
       return String(this.parser.parseInline(token.tokens)) + "\n";
+    },
+
+    // Unsupported block tokens — degrade gracefully ───────────────────────────
+    hr(_token: Tokens.Hr): string {
+      return "────────────────────\n";
+    },
+
+    blockquote(token: Tokens.Blockquote): string {
+      const inner = this.parser.parse(token.tokens as Token[]);
+      return inner
+        .split("\n")
+        .map((line) => (line.length > 0 ? `│ ${line}` : line))
+        .join("\n");
+    },
+
+    br(_token: Tokens.Br): string {
+      return "\n";
+    },
+
+    image(token: Tokens.Image): string {
+      const alt = escapeHtml(token.text);
+      const href = token.href;
+      return href ? `<a href="${href}">${alt || "image"}</a>` : alt || "";
+    },
+
+    html(token: Tokens.HTML | Tokens.Tag): string {
+      return escapeHtml(token.text);
     },
 
     // Text nodes: escape HTML entities ────────────────────────────────────────
