@@ -16,10 +16,24 @@ import { type RendererObject, type Tokens, Marked, type Token } from "marked";
 
 /** Escape the three chars that break Telegram HTML entity parsing. */
 export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Wrap `inner` in `<tag>...</tag>`, but leave any `<code>...</code>` or
+ * `<pre>...</pre>` segments unwrapped. Telegram forbids `code`/`pre` nested
+ * inside other entities — nesting triggers "can't parse entities" errors.
+ * Empty wrap segments (e.g. leading/trailing) are dropped to avoid `<b></b>`.
+ */
+export function splitWrap(tag: string, inner: string): string {
+  const parts = inner.split(/(<code\b[^>]*>[\s\S]*?<\/code>|<pre\b[^>]*>[\s\S]*?<\/pre>)/);
+  return parts
+    .map((p) => {
+      if (p === "") return "";
+      if (p.startsWith("<code") || p.startsWith("<pre")) return p;
+      return `<${tag}>${p}</${tag}>`;
+    })
+    .join("");
 }
 
 // ---------------------------------------------------------------------------
@@ -36,18 +50,15 @@ function buildMarked(): Marked {
   const renderer: RendererObject<string, string> = {
     // Phase 2.1: Inline emphasis ─────────────────────────────────────────────
     strong(token: Tokens.Strong): string {
-      const inner = String(this.parser.parseInline(token.tokens));
-      return `<b>${inner}</b>`;
+      return splitWrap("b", String(this.parser.parseInline(token.tokens)));
     },
 
     em(token: Tokens.Em): string {
-      const inner = String(this.parser.parseInline(token.tokens));
-      return `<i>${inner}</i>`;
+      return splitWrap("i", String(this.parser.parseInline(token.tokens)));
     },
 
     del(token: Tokens.Del): string {
-      const inner = String(this.parser.parseInline(token.tokens));
-      return `<s>${inner}</s>`;
+      return splitWrap("s", String(this.parser.parseInline(token.tokens)));
     },
 
     // Phase 2.2: Code ─────────────────────────────────────────────────────────
@@ -62,14 +73,23 @@ function buildMarked(): Marked {
 
     // Phase 2.3: Headings ─────────────────────────────────────────────────────
     heading(token: Tokens.Heading): string {
-      const inner = String(this.parser.parseInline(token.tokens));
-      return `<b>${inner}</b>\n`;
+      return `${splitWrap("b", String(this.parser.parseInline(token.tokens)))}\n`;
     },
 
     // Phase 2.4: Links and tables ─────────────────────────────────────────────
     link(token: Tokens.Link): string {
       const inner = String(this.parser.parseInline(token.tokens));
-      return `<a href="${token.href}">${inner}</a>`;
+      const href = escapeHtml(token.href ?? "");
+      // Telegram forbids code/pre nested inside <a>. Split inner so code
+      // segments escape the anchor wrapper.
+      const parts = inner.split(/(<code\b[^>]*>[\s\S]*?<\/code>|<pre\b[^>]*>[\s\S]*?<\/pre>)/);
+      return parts
+        .map((p) => {
+          if (p === "") return "";
+          if (p.startsWith("<code") || p.startsWith("<pre")) return p;
+          return `<a href="${href}">${p}</a>`;
+        })
+        .join("");
     },
 
     table(token: Tokens.Table): string {
@@ -86,11 +106,7 @@ function buildMarked(): Marked {
         .join(" | ");
 
       const bodyRows = token.rows
-        .map((row) =>
-          row
-            .map((cell) => String(this.parser.parseInline(cell.tokens)))
-            .join(" | "),
-        )
+        .map((row) => row.map((cell) => String(this.parser.parseInline(cell.tokens))).join(" | "))
         .join("\n");
 
       const rawTable = `${headerCells}\n${separator}\n${bodyRows}`;
@@ -101,8 +117,7 @@ function buildMarked(): Marked {
     list(token: Tokens.List): string {
       const items: string[] = [];
       // `start` can be `""` (falsy) when unordered — treat as 1 for ordered.
-      let counter: number =
-        typeof token.start === "number" && token.start > 0 ? token.start : 1;
+      let counter: number = typeof token.start === "number" && token.start > 0 ? token.start : 1;
 
       for (const item of token.items) {
         // The first token of a list item is usually a "text" token or "paragraph".
@@ -148,7 +163,7 @@ function buildMarked(): Marked {
 
     image(token: Tokens.Image): string {
       const alt = escapeHtml(token.text);
-      const href = token.href;
+      const href = token.href ? escapeHtml(token.href) : "";
       return href ? `<a href="${href}">${alt || "image"}</a>` : alt || "";
     },
 

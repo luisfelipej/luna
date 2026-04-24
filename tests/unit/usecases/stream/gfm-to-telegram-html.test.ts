@@ -159,4 +159,47 @@ describe("gfmToTelegramHtml", () => {
       expect(result).toBe("hello world");
     });
   });
+
+  // Telegram HTML constraint: code/pre cannot nest inside b/i/s/a.
+  describe("code/pre not nested in entities", () => {
+    it("bold containing codespan splits the <b> wrapper", () => {
+      const result = gfmToTelegramHtml("**The hatch (`override`)**");
+      expect(result).not.toMatch(/<b>[^<]*<code>/);
+      expect(result).toContain("<code>override</code>");
+      expect(result).toContain("<b>The hatch (</b>");
+      expect(result).toContain("<b>)</b>");
+    });
+
+    it("italic containing codespan splits the <i> wrapper", () => {
+      const result = gfmToTelegramHtml("*see `x` now*");
+      expect(result).not.toMatch(/<i>[^<]*<code>/);
+      expect(result).toContain("<code>x</code>");
+    });
+
+    it("strikethrough containing codespan splits the <s> wrapper", () => {
+      const result = gfmToTelegramHtml("~~old `api` gone~~");
+      expect(result).not.toMatch(/<s>[^<]*<code>/);
+      expect(result).toContain("<code>api</code>");
+    });
+
+    it("heading containing codespan splits the <b> wrapper", () => {
+      const result = gfmToTelegramHtml("# Title with `code`");
+      expect(result).not.toMatch(/<b>[^<]*<code>/);
+      expect(result).toContain("<code>code</code>");
+    });
+
+    it("link containing codespan splits the <a> wrapper", () => {
+      const result = gfmToTelegramHtml("[see `fn` docs](https://x.com)");
+      expect(result).not.toMatch(/<a [^>]*>[^<]*<code>/);
+      expect(result).toContain("<code>fn</code>");
+      expect(result).toContain('<a href="https://x.com">see </a>');
+    });
+
+    it("regression: bolded heading with inline code emits no nested code", () => {
+      const md = "**The escape hatch (`agentBackendOverride`)**";
+      const result = gfmToTelegramHtml(md);
+      expect(result).not.toMatch(/<b>[^<]*<code>/);
+      expect(result).not.toMatch(/<code>[^<]*<\/code>[^<]*<\/b>/);
+    });
+  });
 });
